@@ -63,6 +63,11 @@ def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     log = common.get_logger("pt-smb")
     try:
+        common.require_tools(["nxc"])
+    except RuntimeError as exc:
+        log.error(str(exc))
+        return 3
+    try:
         hosts = common.parse_targets(args.range, args.targets, args.infile)
     except (ValueError, FileNotFoundError) as exc:
         log.error(str(exc))
