@@ -132,3 +132,38 @@ def get_logger(name):
         logger.setLevel(logging.INFO)
         logger.propagate = False
     return logger
+
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill
+
+ENUM_COLUMNS = ["ip", "port", "state", "http title", "service", "finding"]
+_ROW_KEYS = ["ip", "port", "state", "http_title", "service", "finding"]
+_RED_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+_ANON_MARKERS = ("ANON", "NULL", "GUEST")
+
+
+def write_enum_workbook(rows, out_path):
+    """Write enumeration rows to an .xlsx report; return out_path."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "results"
+    ws.append(ENUM_COLUMNS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        values = [row.get(k, "") for k in _ROW_KEYS]
+        ws.append(values)
+        finding = str(row.get("finding", "")).upper()
+        if any(m in finding for m in _ANON_MARKERS):
+            for cell in ws[ws.max_row]:
+                cell.fill = _RED_FILL
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:F{max(ws.max_row, 1)}"
+    for col_idx, header in enumerate(ENUM_COLUMNS, start=1):
+        width = max(len(header), 12)
+        for row in rows:
+            width = max(width, len(str(row.get(_ROW_KEYS[col_idx - 1], ""))))
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = min(width + 2, 60)
+    wb.save(out_path)
+    return out_path
