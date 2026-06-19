@@ -23,6 +23,11 @@ def test_build_nuclei_cmd():
     assert "/tmp/o.jsonl" in cmd
 
 
+def test_build_nuclei_cmd_custom_bin():
+    cmd = nuclei.build_nuclei_cmd("/tmp/t.txt", "/tmp/o.jsonl", nuclei_bin="/home/u/go/bin/nuclei")
+    assert cmd[0] == "/home/u/go/bin/nuclei"
+
+
 def test_ensure_nuclei_found():
     def which(name):
         return "/usr/bin/nuclei"

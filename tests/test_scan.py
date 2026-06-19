@@ -28,6 +28,16 @@ def test_run_masscan_builds_command_and_parses():
     assert "500" in captured["cmd"]
 
 
+def test_run_masscan_raises_on_failure():
+    class Result:
+        stdout = ""
+        stderr = "FAIL: permission denied (raw sockets require root)"
+        returncode = 1
+    import pytest
+    with pytest.raises(RuntimeError):
+        scan.run_masscan(["10.0.0.1"], [80], runner=lambda c, **k: Result())
+
+
 def test_parse_nmap_grepable():
     text = (
         "# Nmap\n"

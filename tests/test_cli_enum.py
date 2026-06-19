@@ -19,6 +19,15 @@ def test_dispatch_probes_routes_by_port():
     assert "SMB NULL OK" in smb_findings[0]
 
 
+def test_dispatch_probes_partial_on_interrupt():
+    open_ports = {("10.0.0.1", 21), ("10.0.0.1", 8080)}
+    def boom(ip, port=None):
+        raise KeyboardInterrupt
+    fns = {"ftp": boom, "banner": boom, "web": boom, "smb": lambda ip: None}
+    res = cli_enum.dispatch_probes(open_ports, web_ports=[8080], probe_fns=fns)
+    assert isinstance(res, dict)  # returned, did not propagate
+
+
 def test_arg_parser_accepts_inputs():
     parser = cli_enum.build_arg_parser()
     args = parser.parse_args(["-r", "10.0.0.0/30", "-o", "out.xlsx"])

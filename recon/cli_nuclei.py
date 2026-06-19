@@ -47,7 +47,7 @@ def main(argv=None):
         log.error(str(exc))
         return 2
 
-    nuclei.ensure_nuclei()
+    nuclei_bin = nuclei.ensure_nuclei()
     targets_file = args.output + ".targets.txt"
     with open(targets_file, "w") as fh:
         fh.write("\n".join(targets) + "\n")
@@ -59,7 +59,7 @@ def main(argv=None):
         extra += ["-tags", args.tags]
     if args.templates:
         extra += ["-t", args.templates]
-    cmd = nuclei.build_nuclei_cmd(targets_file, args.output, args.severity, extra)
+    cmd = nuclei.build_nuclei_cmd(targets_file, args.output, args.severity, extra, nuclei_bin=nuclei_bin)
     log.info("running: %s", " ".join(cmd))
     result = subprocess.run(cmd)
     log.info("nuclei exit=%s; output=%s", result.returncode, args.output)

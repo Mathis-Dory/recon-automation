@@ -38,8 +38,8 @@ def build_arg_parser():
 
 
 def _target_args(args, hosts_file):
-    """Prefer the swept hosts file if present, else pass through -r/-t/-iL."""
-    if hosts_file and os.path.exists(hosts_file):
+    """Prefer the swept hosts file if present and non-empty, else pass through -r/-t/-iL."""
+    if hosts_file and os.path.exists(hosts_file) and os.path.getsize(hosts_file) > 0:
         return ["-iL", hosts_file]
     passthrough = []
     if args.range:
@@ -61,25 +61,32 @@ def main(argv=None):
     hosts_file = os.path.join(outdir, "live-hosts.txt")
     enum_xlsx = os.path.join(outdir, "enum.xlsx")
 
+    failed = []
     for stage in stages:
         log.info("=== stage: %s ===", stage)
         if stage == "sweep":
-            cli_sweep.main(_target_args(args, None) + ["-o", hosts_file])
+            rc = cli_sweep.main(_target_args(args, None) + ["-o", hosts_file])
+            if os.path.exists(hosts_file) and os.path.getsize(hosts_file) == 0:
+                log.info("sweep found no live hosts; stopping")
+                return 0
         elif stage == "enum":
-            cli_enum.main(_target_args(args, hosts_file) + ["-o", enum_xlsx])
+            rc = cli_enum.main(_target_args(args, hosts_file) + ["-o", enum_xlsx])
         elif stage == "nuclei":
             nuclei_argv = ["-o", os.path.join(outdir, "nuclei.jsonl")]
             if os.path.exists(enum_xlsx):
                 nuclei_argv += ["--from-enum", enum_xlsx]
             else:
                 nuclei_argv += _target_args(args, hosts_file)
-            cli_nuclei.main(nuclei_argv)
+            rc = cli_nuclei.main(nuclei_argv)
         elif stage == "nessus":
-            cli_nessus.main(_target_args(args, hosts_file) + ["-n", args.name])
+            rc = cli_nessus.main(_target_args(args, hosts_file) + ["-n", args.name])
         elif stage == "smb":
-            cli_smb.main(_target_args(args, hosts_file) + ["-o", os.path.join(outdir, "smb.xlsx")])
+            rc = cli_smb.main(_target_args(args, hosts_file) + ["-o", os.path.join(outdir, "smb.xlsx")])
+        if rc:
+            log.warning("stage %s exited %s", stage, rc)
+            failed.append(stage)
     log.info("recon complete: %s", outdir)
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

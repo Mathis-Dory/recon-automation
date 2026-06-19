@@ -13,10 +13,16 @@ def parse_masscan_list(text):
 
 
 def run_masscan(hosts, ports, rate=1000, runner=subprocess.run):
-    """Run masscan and return open (ip, port) pairs."""
+    """Run masscan and return open (ip, port) pairs. Raises RuntimeError on failure."""
     port_csv = ",".join(str(p) for p in ports)
     cmd = ["masscan", f"-p{port_csv}", "--rate", str(rate), "-oL", "-", *hosts]
     result = runner(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        raise RuntimeError(
+            f"masscan failed (exit {result.returncode}): {stderr or 'no stderr output'}. "
+            "masscan needs root for raw sockets — re-run with sudo."
+        )
     return parse_masscan_list(result.stdout)
 
 

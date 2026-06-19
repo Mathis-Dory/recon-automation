@@ -34,13 +34,20 @@ def ensure_nuclei(which=shutil.which, runner=subprocess.run):
         return path
     runner(["go", "install", _GO_INSTALL], check=True)
     gobin = os.path.expanduser("~/go/bin/nuclei")
+    link = os.path.expanduser("~/tools/go-tools/bin/nuclei")
+    try:
+        os.makedirs(os.path.dirname(link), exist_ok=True)
+        if not os.path.lexists(link):
+            os.symlink(gobin, link)
+    except OSError:
+        pass
     return gobin
 
 
-def build_nuclei_cmd(targets_file, out_path, severity="medium,high,critical", extra=None):
+def build_nuclei_cmd(targets_file, out_path, severity="medium,high,critical", extra=None, nuclei_bin="nuclei"):
     """Construct the nuclei command line."""
     cmd = [
-        "nuclei", "-l", targets_file,
+        nuclei_bin, "-l", targets_file,
         "-severity", severity,
         "-jsonl", "-o", out_path,
     ]

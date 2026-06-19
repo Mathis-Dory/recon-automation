@@ -32,6 +32,9 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None):
                 finding = fns["smb"](ip)
                 if finding:
                     results[(ip, port)]["finding"] = finding
+        except KeyboardInterrupt:
+            results[(ip, port)]["finding"] = "INTERRUPTED"
+            break
         except Exception as exc:  # never abort the whole run
             results[(ip, port)]["finding"] = f"probe error: {exc}"
     return results
@@ -53,6 +56,11 @@ def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     log = common.get_logger("pt-enum")
     try:
+        common.require_tools(["masscan", "nmap"])
+    except RuntimeError as exc:
+        log.error(str(exc))
+        return 3
+    try:
         hosts = common.parse_targets(args.range, args.targets, args.infile)
     except (ValueError, FileNotFoundError) as exc:
         log.error(str(exc))
@@ -62,7 +70,11 @@ def main(argv=None):
     web_ports = common.parse_ports(args.web_ports) if args.web_ports else common.DEFAULT_WEB_PORTS
 
     log.info("masscan: %d hosts x %d ports (rate %d)", len(hosts), len(ports), args.rate)
-    open_ports = scan.run_masscan(hosts, ports, rate=args.rate)
+    try:
+        open_ports = scan.run_masscan(hosts, ports, rate=args.rate)
+    except RuntimeError as exc:
+        log.error(str(exc))
+        return 1
     log.info("masscan found %d open ports", len(open_ports))
     if not open_ports:
         common.write_enum_workbook([], args.output)

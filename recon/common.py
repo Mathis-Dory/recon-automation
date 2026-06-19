@@ -4,6 +4,14 @@ import ipaddress
 import os
 import configparser
 import logging
+import shutil
+
+
+def require_tools(names):
+    """Raise RuntimeError if any external tool in `names` is not on PATH."""
+    missing = [n for n in names if shutil.which(n) is None]
+    if missing:
+        raise RuntimeError("required tool(s) not found on PATH: " + ", ".join(missing))
 
 
 def expand_range(spec):
