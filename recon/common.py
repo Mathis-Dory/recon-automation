@@ -1,6 +1,8 @@
 """Shared helpers: target/port parsing, config, Excel/JSON, output, logging."""
 
 import ipaddress
+import os
+import configparser
 
 
 def expand_range(spec):
@@ -86,3 +88,24 @@ def default_enum_ports():
     for plist in SERVICE_PORTS.values():
         ports.update(plist)
     return sorted(ports)
+
+
+DEFAULT_CONFIG_PATH = os.path.expanduser("~/.config/pentest-recon/config.ini")
+
+
+def load_nessus_config(path=DEFAULT_CONFIG_PATH):
+    """Load Nessus settings from an INI file."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"config not found: {path}")
+    parser = configparser.ConfigParser()
+    parser.read(path)
+    section = parser["nessus"] if parser.has_section("nessus") else {}
+    cfg = {
+        "url": section.get("url", "https://localhost:8834"),
+        "access_key": section.get("access_key", ""),
+        "secret_key": section.get("secret_key", ""),
+        "template": section.get("template", "Basic Network Scan"),
+    }
+    if not cfg["access_key"] or not cfg["secret_key"]:
+        raise ValueError("config missing access_key/secret_key in [nessus]")
+    return cfg
