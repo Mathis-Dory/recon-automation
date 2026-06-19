@@ -3,6 +3,7 @@
 import ipaddress
 import os
 import configparser
+import logging
 
 
 def expand_range(spec):
@@ -109,3 +110,25 @@ def load_nessus_config(path=DEFAULT_CONFIG_PATH):
     if not cfg["access_key"] or not cfg["secret_key"]:
         raise ValueError("config missing access_key/secret_key in [nessus]")
     return cfg
+
+
+DEFAULT_OUTPUT_ROOT = os.path.expanduser("~/tools/recon/output")
+
+
+def engagement_dir(name, root=DEFAULT_OUTPUT_ROOT):
+    """Create and return the output directory for an engagement."""
+    path = os.path.join(root, name)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def get_logger(name):
+    """Return a console logger with a single INFO handler."""
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    return logger
