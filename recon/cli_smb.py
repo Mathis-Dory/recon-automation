@@ -67,9 +67,8 @@ def main(argv=None):
     except (ValueError, FileNotFoundError) as exc:
         log.error(str(exc))
         return 2
-    target_str = ",".join(hosts)
     result = subprocess.run(
-        ["nxc", "smb", target_str], capture_output=True, text=True
+        ["nxc", "smb", *hosts], capture_output=True, text=True
     )
     parsed = parse_nxc_smb(result.stdout + result.stderr)
     findings = {}
