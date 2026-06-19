@@ -43,3 +43,46 @@ def parse_targets(range_=None, targets=None, infile=None):
     if not hosts:
         raise ValueError("no targets resolved from -r/-t/-iL")
     return sorted(hosts, key=lambda ip: ipaddress.ip_address(ip))
+
+
+DEFAULT_WEB_PORTS = [
+    80, 81, 88, 443, 8080, 8081, 8443, 8888,
+    9000, 9001, 9090, 8000, 8008, 8090, 7001, 10000,
+]
+
+SERVICE_PORTS = {
+    "ftp": [21],
+    "ssh": [22],
+    "telnet": [23],
+    "smb": [139, 445],
+}
+
+
+def parse_ports(spec):
+    """Parse '80,443,8000-8002' into a sorted, de-duplicated int list."""
+    ports = set()
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if "-" in tok:
+            a, b = tok.split("-", 1)
+            lo, hi = int(a), int(b)
+            rng = range(lo, hi + 1)
+        else:
+            rng = [int(tok)]
+        for p in rng:
+            if not 1 <= p <= 65535:
+                raise ValueError(f"port out of range: {p}")
+            ports.add(p)
+    if not ports:
+        raise ValueError("no ports parsed")
+    return sorted(ports)
+
+
+def default_enum_ports():
+    """Sorted union of all service ports and the default web ports."""
+    ports = set(DEFAULT_WEB_PORTS)
+    for plist in SERVICE_PORTS.values():
+        ports.update(plist)
+    return sorted(ports)
