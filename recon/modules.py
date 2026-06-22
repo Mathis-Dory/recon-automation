@@ -36,3 +36,55 @@ class Module:
     default_on: bool = True
     togglable: bool = True
     run: Optional[Callable] = None
+
+
+class Registry:
+    """In-process registry of recon modules keyed by name."""
+
+    def __init__(self) -> None:
+        self._modules: dict[str, Module] = {}
+
+    def register(self, mod: Module) -> None:
+        if mod.stage not in STAGES:
+            raise ValueError(f"unknown stage: {mod.stage}")
+        if mod.name in self._modules:
+            raise ValueError(f"duplicate module name: {mod.name}")
+        self._modules[mod.name] = mod
+
+    def get(self, name: str) -> Module:
+        return self._modules[name]
+
+    def has(self, name: str) -> bool:
+        return name in self._modules
+
+    def names(self) -> List[str]:
+        return list(self._modules)
+
+    def iter(self, stage: Optional[str] = None):
+        for m in self._modules.values():
+            if stage is None or m.stage == stage:
+                yield m
+
+
+_DEFAULT_REGISTRY = Registry()
+
+
+def module(*, name: str, stage: str, help: str,
+           requires: Optional[List[Requirement]] = None,
+           default_on: bool = True, togglable: bool = True,
+           registry: Optional[Registry] = None):
+    """Decorator: register the wrapped function as a recon module."""
+    def decorator(fn: Callable) -> Callable:
+        mod = Module(
+            name=name,
+            stage=stage,
+            help=help,
+            requires=list(requires or []),
+            default_on=default_on,
+            togglable=togglable,
+            run=fn,
+        )
+        target = registry or _DEFAULT_REGISTRY
+        target.register(mod)
+        return fn
+    return decorator
