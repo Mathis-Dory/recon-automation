@@ -1,85 +1,52 @@
-"""pt-recon: orchestrate sweep → enum → nuclei (+ optional nessus/smb).
+"""pt-recon: orchestrate registered modules across recon stages.
 
-Runs the recon stages in order, writing all artifacts under the engagement
-directory returned by ``common.engagement_dir(name)``:
-
-  * ``live-hosts.txt`` — output of the sweep stage; consumed by later stages.
-  * ``enum.xlsx``      — output of the enum stage; consumed by nuclei.
-  * ``nuclei.jsonl``   — output of the nuclei stage.
-  * ``smb.xlsx``       — output of the optional smb stage.
-
-If the sweep stage finds zero live hosts, the orchestrator exits 0 without
-running later stages. Otherwise, the exit code is non-zero if any stage
-returned non-zero, and 0 if every stage succeeded.
+Default invocation (no subcommand) runs every enabled stage in order
+(sweep → enum → nuclei → nessus → smb), with auto-skip on missing
+prerequisites per the umbrella design spec §9.1.
 """
 import os
 import sys
+import time
 import argparse
+import logging
 
 from recon import common
 from recon import cli_sweep, cli_enum, cli_nuclei, cli_nessus, cli_smb
+from recon.modules import (
+    _DEFAULT_REGISTRY,
+    register_argparse_flags,
+    evaluate_enabled,
+    check_requirements,
+    Ok, Skip, STAGES,
+)
+from recon.manifest import RunManifest, attach_run_log
 
 
-def plan_stages(args):
-    """Return ordered enabled stages."""
-    stages = []
-    if not args.no_sweep:
-        stages.append("sweep")
-    if not args.no_enum:
-        stages.append("enum")
-    if not args.no_nuclei:
-        stages.append("nuclei")
-    if args.nessus:
-        stages.append("nessus")
-    if args.smb:
-        stages.append("smb")
-    return stages
+# Stages this phase actually executes (feedback and report land in later phases).
+_PHASE_1_STAGES = ["sweep", "enum", "nuclei", "nessus", "smb"]
+
+# Map stage → callable main(argv) -> int. Subparser dispatch in Task 10 reuses this.
+# Lambdas dereference the module attribute at call time so monkeypatching works in tests.
+_STAGE_MAIN = {
+    "sweep": lambda a: cli_sweep.main(a),
+    "enum": lambda a: cli_enum.main(a),
+    "nuclei": lambda a: cli_nuclei.main(a),
+    "nessus": lambda a: cli_nessus.main(a),
+    "smb": lambda a: cli_smb.main(a),
+}
 
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog="pt-recon",
-        description=(
-            "Orchestrate the recon stages: sweep → enum → nuclei, "
-            "with optional nessus and smb stages."
-        ),
-        epilog=(
-            "examples:\n"
-            "  pt-recon -n acme -r 10.0.0.0/24\n"
-            "  pt-recon -n acme -iL targets.txt --nessus --smb\n"
-            "  pt-recon -n acme -t 10.0.0.5,10.0.0.6 --no-nuclei\n"
-            "\n"
-            "stages:\n"
-            "  sweep   nmap -sn ping sweep → live-hosts.txt\n"
-            "  enum    masscan + nmap -sV + probes → enum.xlsx\n"
-            "  nuclei  nuclei against enum web targets → nuclei.jsonl\n"
-            "  nessus  (opt-in) launch a Nessus scan via REST API\n"
-            "  smb     (opt-in) netexec SMB mass-recon → smb.xlsx\n"
-            "\n"
-            "exit codes:\n"
-            "  0  every enabled stage succeeded (or sweep found no hosts)\n"
-            "  1  at least one stage exited non-zero\n"
-        ),
+        description="Recon orchestrator (registry-driven).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-n", "--name", required=True,
-                        help="engagement name; artifacts go under the engagement directory")
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("--no-sweep", action="store_true",
-                        help="skip the sweep stage; later stages use -r/-t/-iL directly")
-    parser.add_argument("--no-enum", action="store_true",
-                        help="skip the enum stage; nuclei will fall back to -r/-t/-iL")
-    parser.add_argument("--no-nuclei", action="store_true",
-                        help="skip the nuclei stage")
-    parser.add_argument("--nessus", action="store_true",
-                        help="also launch a Nessus scan (requires config)")
-    parser.add_argument("--smb", action="store_true",
-                        help="also run SMB mass-recon → smb.xlsx")
+    parser.add_argument("-n", "--name", required=True, help="engagement name")
+    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
+    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
+    register_argparse_flags(parser, _DEFAULT_REGISTRY)
     return parser
 
 
@@ -97,42 +64,133 @@ def _target_args(args, hosts_file):
     return passthrough
 
 
+def _enum_argv(args, hosts_file, enum_xlsx, enabled_modules):
+    argv = _target_args(args, hosts_file) + ["-o", enum_xlsx]
+    # Pass probes that were disabled by the operator so cli_enum can skip them.
+    all_probe_names = {m.name for m in _DEFAULT_REGISTRY.iter(stage="enum")
+                       if m.name.startswith("probe-")}
+    disabled = sorted(all_probe_names - enabled_modules)
+    if disabled:
+        argv += ["--disable-probes", ",".join(disabled)]
+    return argv
+
+
+def _build_stage_argv(stage, args, hosts_file, enum_xlsx, outdir, enabled_modules):
+    if stage == "sweep":
+        return _target_args(args, None) + ["-o", hosts_file]
+    if stage == "enum":
+        return _enum_argv(args, hosts_file, enum_xlsx, enabled_modules)
+    if stage == "nuclei":
+        argv = ["-o", os.path.join(outdir, "nuclei.jsonl")]
+        if os.path.exists(enum_xlsx):
+            argv += ["--from-enum", enum_xlsx]
+        else:
+            argv += _target_args(args, hosts_file)
+        return argv
+    if stage == "nessus":
+        return _target_args(args, hosts_file) + ["-n", args.name]
+    if stage == "smb":
+        return _target_args(args, hosts_file) + ["-o", os.path.join(outdir, "smb.xlsx")]
+    raise ValueError(f"unknown stage: {stage}")
+
+
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
     log = common.get_logger("pt-recon")
-    outdir = common.engagement_dir(args.name)
-    stages = plan_stages(args)
-    log.info("engagement '%s' → %s; stages: %s", args.name, outdir, ", ".join(stages))
 
+    outdir = common.engagement_dir(args.name)
+    os.makedirs(outdir, exist_ok=True)
     hosts_file = os.path.join(outdir, "live-hosts.txt")
     enum_xlsx = os.path.join(outdir, "enum.xlsx")
 
-    failed = []
-    for stage in stages:
-        log.info("=== stage: %s ===", stage)
-        if stage == "sweep":
-            rc = cli_sweep.main(_target_args(args, None) + ["-o", hosts_file])
-            if os.path.exists(hosts_file) and os.path.getsize(hosts_file) == 0:
+    # Resolve target list for the manifest.
+    try:
+        targets = common.parse_targets(args.range, args.targets, args.infile)
+    except (ValueError, FileNotFoundError) as exc:
+        log.error("target parse error: %s", exc)
+        return 2
+
+    targets_source = " ".join(
+        flag for flag in (
+            f"-r {args.range}" if args.range else None,
+            f"-t {args.targets}" if args.targets else None,
+            f"-iL {args.infile}" if args.infile else None,
+        ) if flag
+    )
+
+    manifest = RunManifest(args.name, outdir, len(targets), targets_source)
+    log_handler = attach_run_log(os.path.join(outdir, "run.log"))
+
+    enabled_global = evaluate_enabled(args, _DEFAULT_REGISTRY)
+    log.info("engagement '%s' → %s", args.name, outdir)
+    log.info("enabled modules: %s", ", ".join(sorted(enabled_global)) or "(none)")
+
+    overall_rc = 0
+    try:
+        for stage in _PHASE_1_STAGES:
+            stage_modules = [m for m in _DEFAULT_REGISTRY.iter(stage=stage)
+                             if m.name in enabled_global]
+            modules_skipped = []
+
+            if not stage_modules:
+                log.info("=== stage: %s (skipped — disabled) ===", stage)
+                manifest.add_stage(stage, "skipped", 0.0, [], [], None)
+                continue
+
+            # Auto-skip modules whose prereqs fail.
+            runnable = []
+            for m in stage_modules:
+                check = check_requirements(m)
+                if isinstance(check, Skip):
+                    log.warning("%s skipped: %s", m.name, check.reason)
+                    modules_skipped.append({"name": m.name, "reason": check.reason})
+                else:
+                    runnable.append(m)
+
+            if not runnable:
+                log.info("=== stage: %s (skipped — all modules unmet) ===", stage)
+                manifest.add_stage(stage, "skipped", 0.0, [], modules_skipped, None)
+                continue
+
+            log.info("=== stage: %s ===", stage)
+            stage_argv = _build_stage_argv(
+                stage, args, hosts_file, enum_xlsx, outdir, enabled_global,
+            )
+            start = time.monotonic()
+            rc = _STAGE_MAIN[stage](stage_argv)
+            elapsed = time.monotonic() - start
+
+            status = "ok" if rc == 0 else "error"
+            if rc:
+                overall_rc = 1
+                log.warning("stage %s exited %s", stage, rc)
+            manifest.add_stage(
+                stage, status, elapsed,
+                modules_run=[m.name for m in runnable],
+                modules_skipped=modules_skipped,
+                exit_code=rc,
+            )
+
+            # Sweep short-circuit: zero live hosts → bail out cleanly.
+            if stage == "sweep" and os.path.exists(hosts_file) and \
+                    os.path.getsize(hosts_file) == 0:
                 log.info("sweep found no live hosts; stopping")
+                manifest.set_exit_code(0)
                 return 0
-        elif stage == "enum":
-            rc = cli_enum.main(_target_args(args, hosts_file) + ["-o", enum_xlsx])
-        elif stage == "nuclei":
-            nuclei_argv = ["-o", os.path.join(outdir, "nuclei.jsonl")]
-            if os.path.exists(enum_xlsx):
-                nuclei_argv += ["--from-enum", enum_xlsx]
-            else:
-                nuclei_argv += _target_args(args, hosts_file)
-            rc = cli_nuclei.main(nuclei_argv)
-        elif stage == "nessus":
-            rc = cli_nessus.main(_target_args(args, hosts_file) + ["-n", args.name])
-        elif stage == "smb":
-            rc = cli_smb.main(_target_args(args, hosts_file) + ["-o", os.path.join(outdir, "smb.xlsx")])
-        if rc:
-            log.warning("stage %s exited %s", stage, rc)
-            failed.append(stage)
-    log.info("recon complete: %s", outdir)
-    return 1 if failed else 0
+
+        manifest.set_exit_code(overall_rc)
+        log.info("recon complete: %s (exit %s)", outdir, overall_rc)
+        return overall_rc
+    except KeyboardInterrupt:
+        log.warning("interrupted")
+        manifest.set_exit_code(130)
+        return 130
+    finally:
+        # Detach log handler so subsequent runs don't accumulate file handles.
+        for name in list(logging.Logger.manager.loggerDict):
+            if name.startswith("pt-"):
+                logging.getLogger(name).removeHandler(log_handler)
+        log_handler.close()
 
 
 if __name__ == "__main__":
