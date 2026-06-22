@@ -1,5 +1,5 @@
 import pytest
-from recon.modules import Module, Tool, ConfigKey, Soft, STAGES, Registry, module
+from recon.modules import Module, Tool, ConfigKey, Soft, STAGES, Registry, module, Ok, Skip, check_requirements
 
 
 def test_stages_constant():
@@ -81,3 +81,48 @@ def test_module_decorator_registers_and_stores_run():
     assert m.run is runner
     assert m.help == "x stage"
     assert m.default_on is True
+
+
+def test_check_no_requirements_returns_ok():
+    m = Module(name="x", stage="sweep", help="x")
+    assert isinstance(check_requirements(m, config_loader=lambda: {}), Ok)
+
+
+def test_check_missing_tool_returns_skip(monkeypatch):
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    m = Module(name="x", stage="sweep", help="x", requires=[Tool("nope")])
+    result = check_requirements(m, config_loader=lambda: {})
+    assert isinstance(result, Skip)
+    assert "nope" in result.reason
+    assert "PATH" in result.reason
+
+
+def test_check_present_tool_returns_ok(monkeypatch):
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/" + name)
+    m = Module(name="x", stage="sweep", help="x", requires=[Tool("nmap")])
+    assert isinstance(check_requirements(m, config_loader=lambda: {}), Ok)
+
+
+def test_check_missing_config_key_returns_skip():
+    m = Module(name="x", stage="nessus", help="x",
+               requires=[ConfigKey("nessus", "access_key")])
+    result = check_requirements(m, config_loader=lambda: {})
+    assert isinstance(result, Skip)
+    assert "nessus" in result.reason and "access_key" in result.reason
+
+
+def test_check_present_config_key_returns_ok():
+    m = Module(name="x", stage="nessus", help="x",
+               requires=[ConfigKey("nessus", "access_key")])
+    loader = lambda: {"nessus": {"access_key": "abc"}}
+    assert isinstance(check_requirements(m, config_loader=loader), Ok)
+
+
+def test_soft_requirement_never_skips(monkeypatch):
+    import shutil
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    m = Module(name="x", stage="enum", help="x",
+               requires=[Soft(Tool("showmount"))])
+    assert isinstance(check_requirements(m, config_loader=lambda: {}), Ok)
