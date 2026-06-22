@@ -19,27 +19,34 @@ from recon import common, scan, probes, enum_core
 SMB_PORTS = {139, 445}
 
 
-def dispatch_probes(open_ports, web_ports, probe_fns=None):
-    """Route each open port to its probe; return per-(ip,port) results."""
+def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None):
+    """Route each open port to its probe; return per-(ip,port) results.
+
+    `disabled_probes`, when given, is an iterable of registry probe names
+    (`probe-ftp`, `probe-ssh`, `probe-web-basic`, `probe-smb`) that should
+    be silently skipped — the corresponding row stays at the default empty
+    finding/http_title.
+    """
     fns = probe_fns or {
         "ftp": probes.probe_ftp_anon,
         "banner": probes.probe_banner,
         "web": probes.probe_web_title,
         "smb": probes.probe_smb,
     }
+    disabled = set(disabled_probes or [])
     results = {key: {"http_title": "", "finding": ""} for key in open_ports}
     smb_done = set()
     for ip, port in open_ports:
         try:
-            if port == 21:
+            if port == 21 and "probe-ftp" not in disabled:
                 finding = fns["ftp"](ip, port)
                 if finding:
                     results[(ip, port)]["finding"] = finding
-            elif port in (22, 23):
+            elif port in (22, 23) and "probe-ssh" not in disabled:
                 results[(ip, port)]["finding"] = fns["banner"](ip, port)
-            elif port in web_ports:
+            elif port in web_ports and "probe-web-basic" not in disabled:
                 results[(ip, port)]["http_title"] = fns["web"](ip, port)
-            elif port in SMB_PORTS and ip not in smb_done:
+            elif port in SMB_PORTS and ip not in smb_done and "probe-smb" not in disabled:
                 smb_done.add(ip)
                 finding = fns["smb"](ip)
                 if finding:
@@ -87,6 +94,9 @@ def build_arg_parser():
                         help="ports treated as HTTP for the web probe (default: built-in web set)")
     parser.add_argument("--rate", dest="rate", type=int, default=1000,
                         help="masscan packet rate in pps (default: 1000)")
+    parser.add_argument("--disable-probes", dest="disable_probes", default="",
+                        help="comma-separated registry probe names to skip (advanced; "
+                             "set automatically by pt-recon)")
     return parser
 
 
@@ -120,7 +130,8 @@ def main(argv=None):
         return 0
 
     nmap_info = scan.run_nmap_sv(open_ports)
-    probe_results = dispatch_probes(open_ports, web_ports)
+    disabled = {p.strip() for p in (args.disable_probes or "").split(",") if p.strip()}
+    probe_results = dispatch_probes(open_ports, web_ports, disabled_probes=disabled)
     rows = enum_core.build_rows(open_ports, nmap_info, probe_results)
     out = common.write_enum_workbook(rows, args.output)
     anon = sum(1 for r in rows if any(m in r["finding"].upper() for m in ("ANON", "NULL", "GUEST")))
