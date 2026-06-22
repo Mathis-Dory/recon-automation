@@ -1,6 +1,9 @@
 """Module registry primitives: dataclass, requirement types, and constants."""
 from __future__ import annotations
 
+import shutil
+import configparser
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Union
 
@@ -25,6 +28,53 @@ class Soft:
 
 
 Requirement = Union[Tool, ConfigKey, Soft]
+
+
+@dataclass
+class Ok:
+    """Requirement check passed."""
+
+
+@dataclass
+class Skip:
+    """Requirement check failed — the module should be skipped."""
+    reason: str
+
+
+def _check_one(req: Requirement, config_loader: Callable[[], dict]) -> Optional[Skip]:
+    if isinstance(req, Soft):
+        return None  # soft requirements never produce Skip
+    if isinstance(req, Tool):
+        if shutil.which(req.name) is None:
+            return Skip(f"{req.name} not on PATH")
+        return None
+    if isinstance(req, ConfigKey):
+        cfg = config_loader()
+        section = cfg.get(req.section, {})
+        if not section.get(req.key):
+            return Skip(f"config {req.section}.{req.key} missing or empty")
+        return None
+    raise TypeError(f"unknown requirement type: {type(req).__name__}")
+
+
+def _default_config_loader() -> dict:
+    from recon import common  # local import to avoid cycle at module load
+    path = Path(common.DEFAULT_CONFIG_PATH)
+    if not path.exists():
+        return {}
+    cp = configparser.ConfigParser()
+    cp.read(path)
+    return {s: dict(cp.items(s)) for s in cp.sections()}
+
+
+def check_requirements(mod: Module,
+                       config_loader: Optional[Callable[[], dict]] = None):
+    loader = config_loader or _default_config_loader
+    for req in mod.requires:
+        result = _check_one(req, loader)
+        if result is not None:
+            return result
+    return Ok()
 
 
 @dataclass
