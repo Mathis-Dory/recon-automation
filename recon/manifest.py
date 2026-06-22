@@ -3,12 +3,16 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
 
 def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _default_clock() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class RunManifest:
@@ -17,7 +21,7 @@ class RunManifest:
     def __init__(self, engagement: str, outdir: str,
                  targets_count: int, targets_source: str,
                  *, clock: Optional[Callable[[], datetime]] = None) -> None:
-        self._clock = clock or datetime.utcnow
+        self._clock = clock or _default_clock
         self.path = os.path.join(outdir, "run.json")
         self._data: Dict = {
             "engagement": engagement,

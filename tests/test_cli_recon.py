@@ -127,7 +127,7 @@ def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypat
     )
 
     monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n") or 0))
+                        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n"), 0)[1])
     monkeypatch.setattr("recon.cli_enum.main",
                         lambda a: (open(a[a.index("-o") + 1], "w").close() or 0))
     monkeypatch.setattr("recon.cli_nuclei.main", lambda a: 0)
