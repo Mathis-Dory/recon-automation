@@ -1,6 +1,7 @@
 """Module registry primitives: dataclass, requirement types, and constants."""
 from __future__ import annotations
 
+import argparse  # noqa: F401  (used in type hint on register_argparse_flags)
 import shutil
 import configparser
 from pathlib import Path
@@ -138,3 +139,61 @@ def module(*, name: str, stage: str, help: str,
         target.register(mod)
         return fn
     return decorator
+
+
+def _stage_attr(stage: str) -> str:
+    return f"no_{stage.replace('-', '_')}"
+
+
+def _module_attr(name: str, default_on: bool) -> str:
+    prefix = "no_" if default_on else ""
+    return f"{prefix}{name.replace('-', '_')}"
+
+
+def register_argparse_flags(parser, registry: Registry) -> None:
+    """Add stage and module toggle flags to `parser` from `registry`."""
+    stages_seen = {m.stage for m in registry.iter()}
+    for stage in STAGES:
+        if stage in stages_seen:
+            parser.add_argument(
+                f"--no-{stage}",
+                action="store_true",
+                help=f"skip the {stage} stage entirely",
+            )
+    for m in registry.iter():
+        if not m.togglable:
+            continue
+        if m.name == m.stage:
+            continue  # stage flag already covers it
+        if m.default_on:
+            parser.add_argument(
+                f"--no-{m.name}",
+                action="store_true",
+                dest=_module_attr(m.name, True),
+                help=f"skip {m.name}: {m.help}",
+            )
+        else:
+            parser.add_argument(
+                f"--{m.name}",
+                action="store_true",
+                dest=_module_attr(m.name, False),
+                help=f"enable {m.name}: {m.help}",
+            )
+
+
+def evaluate_enabled(args, registry: Registry) -> set:
+    """Return the set of module names that should run, given parsed args."""
+    enabled = {m.name for m in registry.iter() if m.default_on}
+    for stage in STAGES:
+        if getattr(args, _stage_attr(stage), False):
+            for m in registry.iter(stage=stage):
+                enabled.discard(m.name)
+    for m in registry.iter():
+        if not m.togglable or m.name == m.stage:
+            continue
+        flagged = getattr(args, _module_attr(m.name, m.default_on), False)
+        if m.default_on and flagged:
+            enabled.discard(m.name)
+        elif not m.default_on and flagged:
+            enabled.add(m.name)
+    return enabled

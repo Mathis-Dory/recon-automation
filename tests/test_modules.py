@@ -126,3 +126,80 @@ def test_soft_requirement_never_skips(monkeypatch):
     m = Module(name="x", stage="enum", help="x",
                requires=[Soft(Tool("showmount"))])
     assert isinstance(check_requirements(m, config_loader=lambda: {}), Ok)
+
+
+import argparse
+from recon.modules import register_argparse_flags, evaluate_enabled
+
+
+def _fresh_registry() -> Registry:
+    r = Registry()
+    r.register(Module(name="sweep", stage="sweep", help="ping sweep"))
+    r.register(Module(name="masscan", stage="enum", help="masscan", togglable=False))
+    r.register(Module(name="probe-ftp", stage="enum", help="ftp anon"))
+    r.register(Module(name="probe-ssh", stage="enum", help="ssh banner"))
+    r.register(Module(name="probe-ptr", stage="enum", help="reverse dns",
+                      default_on=False))
+    r.register(Module(name="nuclei", stage="nuclei", help="nuclei"))
+    return r
+
+
+def test_register_flags_adds_expected_args():
+    parser = argparse.ArgumentParser()
+    r = _fresh_registry()
+    register_argparse_flags(parser, r)
+    args = parser.parse_args([])
+    # stage flags
+    assert args.no_sweep is False
+    assert args.no_enum is False
+    assert args.no_nuclei is False
+    # module flags
+    assert args.no_probe_ftp is False
+    assert args.no_probe_ssh is False
+    assert args.probe_ptr is False
+    # non-togglable modules get no flag
+    assert not hasattr(args, "no_masscan")
+    # single-module stages: no separate --no-<module> for module that matches stage
+    assert not hasattr(args, "no_sweep_module")
+    assert not hasattr(args, "no_nuclei_module")
+
+
+def test_evaluate_default_enables_all_default_on():
+    parser = argparse.ArgumentParser()
+    r = _fresh_registry()
+    register_argparse_flags(parser, r)
+    args = parser.parse_args([])
+    enabled = evaluate_enabled(args, r)
+    assert enabled == {"sweep", "masscan", "probe-ftp", "probe-ssh", "nuclei"}
+
+
+def test_evaluate_stage_flag_disables_all_modules_in_stage():
+    parser = argparse.ArgumentParser()
+    r = _fresh_registry()
+    register_argparse_flags(parser, r)
+    args = parser.parse_args(["--no-enum"])
+    enabled = evaluate_enabled(args, r)
+    assert "masscan" not in enabled
+    assert "probe-ftp" not in enabled
+    assert "probe-ssh" not in enabled
+    assert "sweep" in enabled
+    assert "nuclei" in enabled
+
+
+def test_evaluate_module_flag_disables_one_module():
+    parser = argparse.ArgumentParser()
+    r = _fresh_registry()
+    register_argparse_flags(parser, r)
+    args = parser.parse_args(["--no-probe-ftp"])
+    enabled = evaluate_enabled(args, r)
+    assert "probe-ftp" not in enabled
+    assert "probe-ssh" in enabled
+
+
+def test_evaluate_default_off_module_enabled_by_flag():
+    parser = argparse.ArgumentParser()
+    r = _fresh_registry()
+    register_argparse_flags(parser, r)
+    args = parser.parse_args(["--probe-ptr"])
+    enabled = evaluate_enabled(args, r)
+    assert "probe-ptr" in enabled
