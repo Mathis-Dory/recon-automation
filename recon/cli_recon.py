@@ -42,10 +42,14 @@ def build_arg_parser():
         description="Recon orchestrator (registry-driven).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-n", "--name", required=True, help="engagement name")
+    parser.add_argument("-n", "--name", help="engagement name (required unless --list-modules)")
     parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
     parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
     parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="print planned stages, enabled modules, and skip reasons; do not run anything")
+    parser.add_argument("--list-modules", dest="list_modules", action="store_true",
+                        help="print the registry as a table and exit")
     register_argparse_flags(parser, _DEFAULT_REGISTRY)
     return parser
 
@@ -94,8 +98,47 @@ def _build_stage_argv(stage, args, hosts_file, enum_xlsx, outdir, enabled_module
     raise ValueError(f"unknown stage: {stage}")
 
 
+def _render_req(req):
+    from recon.modules import Tool, ConfigKey, Soft
+    if isinstance(req, Tool):
+        return f"tool:{req.name}"
+    if isinstance(req, ConfigKey):
+        return f"config:{req.section}.{req.key}"
+    if isinstance(req, Soft):
+        return f"soft({_render_req(req.inner)})"
+    return repr(req)
+
+
+def _print_module_table():
+    cols = ("name", "stage", "default", "togglable", "requires")
+    rows = [cols]
+    for m in _DEFAULT_REGISTRY.iter():
+        reqs = ", ".join(_render_req(r) for r in m.requires) or "—"
+        rows.append((
+            m.name, m.stage,
+            "on" if m.default_on else "off",
+            "yes" if m.togglable else "no",
+            reqs,
+        ))
+    widths = [max(len(r[i]) for r in rows) for i in range(len(cols))]
+    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
+    for i, row in enumerate(rows):
+        print(fmt.format(*row))
+        if i == 0:
+            print("  ".join("-" * w for w in widths))
+
+
 def main(argv=None):
     args = build_arg_parser().parse_args(argv)
+
+    if args.list_modules:
+        _print_module_table()
+        return 0
+    if not args.name:
+        print("error: -n/--name is required (unless --list-modules is used)",
+              file=sys.stderr)
+        return 2
+
     log = common.get_logger("pt-recon")
 
     outdir = common.engagement_dir(args.name)
@@ -118,10 +161,36 @@ def main(argv=None):
         ) if flag
     )
 
+    enabled_global = evaluate_enabled(args, _DEFAULT_REGISTRY)
+
+    if args.dry_run:
+        print("planned stages:")
+        for stage in _PHASE_1_STAGES:
+            stage_mods = [m for m in _DEFAULT_REGISTRY.iter(stage=stage)
+                          if m.name in enabled_global]
+            if not stage_mods:
+                print(f"  {stage}: (skipped — disabled)")
+                continue
+            runnable, skip_reasons = [], []
+            for m in stage_mods:
+                check = check_requirements(m)
+                if isinstance(check, Skip):
+                    skip_reasons.append((m.name, check.reason))
+                else:
+                    runnable.append(m.name)
+            if runnable:
+                print(f"  {stage}: would run {', '.join(runnable)}")
+            for n, r in skip_reasons:
+                print(f"    skip {n}: {r}")
+            if not runnable and not skip_reasons:
+                print(f"  {stage}: (skipped — disabled)")
+        print()
+        print("enabled modules:", ", ".join(sorted(enabled_global)) or "(none)")
+        return 0
+
     manifest = RunManifest(args.name, outdir, len(targets), targets_source)
     log_handler = attach_run_log(os.path.join(outdir, "run.log"))
 
-    enabled_global = evaluate_enabled(args, _DEFAULT_REGISTRY)
     log.info("engagement '%s' → %s", args.name, outdir)
     log.info("enabled modules: %s", ", ".join(sorted(enabled_global)) or "(none)")
 

@@ -163,3 +163,56 @@ def test_orchestrator_target_parse_error_exits_2(tmp_path, monkeypatch):
     monkeypatch.setattr("recon.common.parse_targets", boom)
     rc = cli_recon.main(["-n", "eng", "-r", "bogus"])
     assert rc == 2
+
+
+def test_list_modules_prints_table_and_exits_zero(capsys):
+    rc = cli_recon.main(["--list-modules"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    # spot-check a row per stage
+    assert "sweep" in out
+    assert "probe-ftp" in out
+    assert "nuclei" in out
+    assert "nessus" in out
+    assert "smb-mass" in out
+    # header
+    assert "name" in out and "stage" in out and "default" in out
+
+
+def test_dry_run_prints_plan_and_exits_zero(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("recon.common.engagement_dir",
+                        lambda name: str(tmp_path / "eng"))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.1"])
+    # nothing should actually run
+    monkeypatch.setattr("recon.cli_sweep.main",
+                        lambda a: pytest.fail("sweep should not run in dry-run"))
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "planned stages" in out.lower()
+    assert "enabled modules" in out.lower()
+    # default-on probes should appear
+    assert "probe-ftp" in out
+
+
+def test_dry_run_shows_auto_skip_reasons(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr("recon.common.engagement_dir",
+                        lambda name: str(tmp_path / "eng"))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH",
+                        str(tmp_path / "nope.ini"))
+    import shutil
+    original_which = shutil.which
+    monkeypatch.setattr(
+        shutil, "which",
+        lambda name: None if name == "nxc" else original_which(name),
+    )
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--dry-run"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "nessus" in out
+    assert "access_key" in out or "nessus.access_key" in out
+    assert "smb-mass" in out
+    assert "nxc" in out
