@@ -17,7 +17,7 @@ from recon.modules import (
     register_argparse_flags,
     evaluate_enabled,
     check_requirements,
-    Ok, Skip, STAGES,
+    Skip,
 )
 from recon.manifest import RunManifest, attach_run_log
 
