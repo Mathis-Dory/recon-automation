@@ -1,4 +1,13 @@
-"""pt-nessus: launch a Nessus scan via the REST API."""
+"""pt-nessus: launch a Nessus scan via the REST API.
+
+Reads Nessus URL and API keys from ``~/.config/pentest-recon/config.ini``
+(see :func:`recon.common.load_nessus_config`), resolves the template, creates
+the scan against the resolved target list, and (unless ``--no-launch``) starts
+it. With ``--wait`` the command polls the scan status every 15 seconds and
+returns once it reaches a terminal state (completed/canceled/aborted).
+
+The scan UI URL is logged on creation so it can be opened from a terminal.
+"""
 import sys
 import time
 import argparse
@@ -8,15 +17,42 @@ from recon.nessus import NessusClient
 
 
 def build_arg_parser():
-    parser = argparse.ArgumentParser(prog="pt-nessus", description="Launch a Nessus scan.")
-    parser.add_argument("-n", "--name", required=True, help="scan name")
-    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
-    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
-    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("--template", help="template name (default from config)")
-    parser.add_argument("--folder", type=int, default=None, help="Nessus folder id")
-    parser.add_argument("--wait", action="store_true", help="poll until completion")
-    parser.add_argument("--no-launch", action="store_true", help="create but do not launch")
+    parser = argparse.ArgumentParser(
+        prog="pt-nessus",
+        description="Create and (by default) launch a Nessus scan via the REST API.",
+        epilog=(
+            "examples:\n"
+            "  pt-nessus -n acme -iL live-hosts.txt\n"
+            "  pt-nessus -n acme -r 10.0.0.0/24 --template 'Basic Network Scan' --wait\n"
+            "  pt-nessus -n acme -t 10.0.0.5 --no-launch\n"
+            "\n"
+            "config:\n"
+            "  ~/.config/pentest-recon/config.ini (mode 0600) with url, access_key,\n"
+            "  secret_key, and optional template.\n"
+            "\n"
+            "exit codes:\n"
+            "  0  scan created (and launched / completed if requested)\n"
+            "  1  Nessus API error\n"
+            "  2  config file missing or invalid\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-n", "--name", required=True,
+                        help="scan name as it will appear in the Nessus UI")
+    parser.add_argument("-r", "--range", dest="range",
+                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
+    parser.add_argument("-t", "--targets", dest="targets",
+                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
+    parser.add_argument("-iL", "--input-list", dest="infile",
+                        help="file with one target per line")
+    parser.add_argument("--template",
+                        help="Nessus template name (default: from config, else 'Basic Network Scan')")
+    parser.add_argument("--folder", type=int, default=None,
+                        help="numeric Nessus folder id to place the scan in")
+    parser.add_argument("--wait", action="store_true",
+                        help="poll scan status every 15s until it reaches a terminal state")
+    parser.add_argument("--no-launch", action="store_true",
+                        help="create the scan but do not start it")
     return parser
 
 

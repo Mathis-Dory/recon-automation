@@ -1,4 +1,16 @@
-"""pt-enum: enumerate services, fingerprint web, export Excel."""
+"""pt-enum: enumerate services, fingerprint web, export Excel.
+
+Pipeline:
+  1. Resolve targets from -r / -t / -iL.
+  2. ``masscan`` at the requested rate to find open ports.
+  3. ``nmap -sV`` to grab service/version banners for those open ports.
+  4. Per-protocol probes (FTP anon, SSH/Telnet banner, HTTP title, SMB null/guest).
+  5. Write an Excel workbook (one row per open ip:port) to ``--output``.
+
+If masscan finds zero open ports the workbook is still written (empty) so the
+orchestrator can chain reliably. Probe errors are recorded per row rather
+than aborting the run; ``KeyboardInterrupt`` short-circuits remaining probes.
+"""
 import sys
 import argparse
 
@@ -41,14 +53,40 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None):
 
 
 def build_arg_parser():
-    parser = argparse.ArgumentParser(prog="pt-enum", description="Service enumeration + web fingerprint to Excel.")
-    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
-    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
-    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("-o", "--output", dest="output", default="enum.xlsx", help="output .xlsx path")
-    parser.add_argument("--ports", dest="ports", help="custom port set, e.g. 22,80,8000-8100")
-    parser.add_argument("--web-ports", dest="web_ports", help="override web ports")
-    parser.add_argument("--rate", dest="rate", type=int, default=1000, help="masscan rate")
+    parser = argparse.ArgumentParser(
+        prog="pt-enum",
+        description=(
+            "Service enumeration: masscan → nmap -sV → per-protocol probes → "
+            "Excel report."
+        ),
+        epilog=(
+            "examples:\n"
+            "  pt-enum -iL live-hosts.txt -o enum.xlsx\n"
+            "  pt-enum -r 10.0.0.0/24 --ports 22,80,443,8000-8100\n"
+            "  pt-enum -t 10.0.0.5 --rate 5000 --web-ports 80,443,8080,8443\n"
+            "\n"
+            "exit codes:\n"
+            "  0  workbook written (may be empty if no open ports were found)\n"
+            "  1  masscan failed at runtime\n"
+            "  2  invalid targets / missing input file\n"
+            "  3  required external tool (masscan or nmap) not on PATH\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-r", "--range", dest="range",
+                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
+    parser.add_argument("-t", "--targets", dest="targets",
+                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
+    parser.add_argument("-iL", "--input-list", dest="infile",
+                        help="file with one target per line")
+    parser.add_argument("-o", "--output", dest="output", default="enum.xlsx",
+                        help="output .xlsx path (default: enum.xlsx)")
+    parser.add_argument("--ports", dest="ports",
+                        help="ports to scan, e.g. 22,80,8000-8100 (default: built-in enum set)")
+    parser.add_argument("--web-ports", dest="web_ports",
+                        help="ports treated as HTTP for the web probe (default: built-in web set)")
+    parser.add_argument("--rate", dest="rate", type=int, default=1000,
+                        help="masscan packet rate in pps (default: 1000)")
     return parser
 
 
