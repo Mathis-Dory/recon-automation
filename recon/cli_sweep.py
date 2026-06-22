@@ -1,4 +1,13 @@
-"""pt-sweep: live-host discovery → hosts file."""
+"""pt-sweep: live-host discovery → hosts file.
+
+Runs ``nmap -sn`` against the supplied targets and writes the IPs whose nmap
+status is ``Up`` to ``--output`` (default ``live-hosts.txt``), one per line.
+Targets come from ``-r`` (CIDR or dashed range), ``-t`` (comma-separated IPs),
+or ``-iL`` (file with one IP per line); the flags may be combined.
+
+If no hosts are up the output file is created empty (no trailing newline) so
+downstream tools can detect this with a size check.
+"""
 import sys
 import subprocess
 import argparse
@@ -23,11 +32,30 @@ def run_sweep(hosts, runner=subprocess.run):
 
 
 def build_arg_parser():
-    parser = argparse.ArgumentParser(prog="pt-sweep", description="Live-host discovery.")
-    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
-    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
-    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("-o", "--output", dest="output", default="live-hosts.txt", help="output file")
+    parser = argparse.ArgumentParser(
+        prog="pt-sweep",
+        description="Live-host discovery via nmap -sn → newline-delimited hosts file.",
+        epilog=(
+            "examples:\n"
+            "  pt-sweep -r 10.0.0.0/24 -o live.txt\n"
+            "  pt-sweep -iL scope.txt\n"
+            "  pt-sweep -t 10.0.0.5,10.0.0.6,10.0.0.7\n"
+            "\n"
+            "exit codes:\n"
+            "  0  sweep ran (output written, possibly empty)\n"
+            "  2  invalid targets / missing input file\n"
+            "  3  required external tool (nmap) not on PATH\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-r", "--range", dest="range",
+                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
+    parser.add_argument("-t", "--targets", dest="targets",
+                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
+    parser.add_argument("-iL", "--input-list", dest="infile",
+                        help="file with one target per line")
+    parser.add_argument("-o", "--output", dest="output", default="live-hosts.txt",
+                        help="output path for live hosts (default: live-hosts.txt)")
     return parser
 
 

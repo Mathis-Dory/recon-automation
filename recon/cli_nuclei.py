@@ -1,4 +1,14 @@
-"""pt-nuclei: run nuclei against targets or enum output → JSONL."""
+"""pt-nuclei: run nuclei against targets or enum output → JSONL.
+
+Builds a deduplicated target list from one or more sources (``--from-enum``
+parses an enum workbook for web URLs; ``-r/-t/-iL`` add raw hosts), writes
+the list to ``<output>.targets.txt`` next to the JSONL output, then invokes
+the nuclei binary via :func:`recon.nuclei.ensure_nuclei`.
+
+Severity, tag, template, and rate-limit flags are passed straight through to
+nuclei. The exit code mirrors nuclei's own exit code, so a non-zero result
+means nuclei itself reported an error.
+"""
 import os
 import sys
 import subprocess
@@ -25,16 +35,40 @@ def collect_targets(args):
 
 
 def build_arg_parser():
-    parser = argparse.ArgumentParser(prog="pt-nuclei", description="Run nuclei → JSONL.")
-    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
-    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
-    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("--from-enum", dest="from_enum", help="enum .xlsx to derive web targets")
-    parser.add_argument("-o", "--output", dest="output", default="nuclei.jsonl", help="JSONL output")
-    parser.add_argument("--severity", default="medium,high,critical", help="severity filter")
-    parser.add_argument("--rate-limit", dest="rate_limit", help="nuclei -rate-limit")
-    parser.add_argument("--tags", help="nuclei -tags")
-    parser.add_argument("--templates", help="nuclei -t templates path")
+    parser = argparse.ArgumentParser(
+        prog="pt-nuclei",
+        description="Run nuclei against an enum workbook and/or raw targets, writing JSONL.",
+        epilog=(
+            "examples:\n"
+            "  pt-nuclei --from-enum enum.xlsx -o nuclei.jsonl\n"
+            "  pt-nuclei -iL live-hosts.txt --severity high,critical\n"
+            "  pt-nuclei -r 10.0.0.0/24 --tags cve,exposure --rate-limit 50\n"
+            "\n"
+            "exit codes:\n"
+            "  0  nuclei completed successfully\n"
+            "  2  no targets supplied (--from-enum and/or -r/-t/-iL required)\n"
+            "  *  any other code is propagated from nuclei itself\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-r", "--range", dest="range",
+                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
+    parser.add_argument("-t", "--targets", dest="targets",
+                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
+    parser.add_argument("-iL", "--input-list", dest="infile",
+                        help="file with one target per line")
+    parser.add_argument("--from-enum", dest="from_enum",
+                        help="enum .xlsx to derive web targets from (may be combined with -r/-t/-iL)")
+    parser.add_argument("-o", "--output", dest="output", default="nuclei.jsonl",
+                        help="JSONL output path (default: nuclei.jsonl)")
+    parser.add_argument("--severity", default="medium,high,critical",
+                        help="nuclei -severity filter (default: medium,high,critical)")
+    parser.add_argument("--rate-limit", dest="rate_limit",
+                        help="passed to nuclei -rate-limit (requests/sec)")
+    parser.add_argument("--tags",
+                        help="passed to nuclei -tags (comma-separated)")
+    parser.add_argument("--templates",
+                        help="passed to nuclei -t (templates path or pattern)")
     return parser
 
 

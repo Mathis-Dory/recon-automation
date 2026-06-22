@@ -1,4 +1,11 @@
-"""pt-smb: netexec SMB mass-recon to Excel."""
+"""pt-smb: netexec SMB mass-recon to Excel.
+
+Runs ``nxc smb`` against every resolved target, parses the host-discovery
+lines into per-IP host/os/domain/signing/SMBv1 fields, then runs the SMB null-
+session / guest probe for each host. Findings and signing/SMBv1 metadata are
+merged into an :func:`recon.common.write_enum_workbook`-shaped workbook so the
+output can be combined with ``pt-enum`` results.
+"""
 import re
 import sys
 import subprocess
@@ -51,11 +58,30 @@ def smb_rows(parsed, findings):
 
 
 def build_arg_parser():
-    parser = argparse.ArgumentParser(prog="pt-smb", description="netexec SMB mass-recon to Excel.")
-    parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
-    parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
-    parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("-o", "--output", dest="output", default="smb.xlsx", help="output .xlsx")
+    parser = argparse.ArgumentParser(
+        prog="pt-smb",
+        description="SMB mass-recon via netexec (nxc) + null/guest probe → Excel.",
+        epilog=(
+            "examples:\n"
+            "  pt-smb -iL live-hosts.txt -o smb.xlsx\n"
+            "  pt-smb -r 10.0.0.0/24\n"
+            "  pt-smb -t 10.0.0.5,10.0.0.6\n"
+            "\n"
+            "exit codes:\n"
+            "  0  workbook written (may be empty if no SMB hosts responded)\n"
+            "  2  invalid targets / missing input file\n"
+            "  3  required external tool (nxc) not on PATH\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-r", "--range", dest="range",
+                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
+    parser.add_argument("-t", "--targets", dest="targets",
+                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
+    parser.add_argument("-iL", "--input-list", dest="infile",
+                        help="file with one target per line")
+    parser.add_argument("-o", "--output", dest="output", default="smb.xlsx",
+                        help="output .xlsx path (default: smb.xlsx)")
     return parser
 
 
