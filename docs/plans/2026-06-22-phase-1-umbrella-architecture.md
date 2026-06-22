@@ -1288,7 +1288,7 @@ def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypat
     )
 
     monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n") or 0))
+                        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n"), 0)[1])
     monkeypatch.setattr("recon.cli_enum.main",
                         lambda a: (open(a[a.index("-o") + 1], "w").close() or 0))
     monkeypatch.setattr("recon.cli_nuclei.main", lambda a: 0)
@@ -1765,8 +1765,12 @@ Append to `tests/test_cli_recon.py`:
 ```python
 def test_subparser_dispatches_sweep(monkeypatch):
     captured = {}
-    monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda argv: captured.setdefault("argv", list(argv)) or 0)
+
+    def fake(argv):
+        captured["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr("recon.cli_sweep.main", fake)
     rc = cli_recon.main(["sweep", "-r", "10.0.0.0/30", "-o", "/tmp/x"])
     assert rc == 0
     assert captured["argv"] == ["-r", "10.0.0.0/30", "-o", "/tmp/x"]
@@ -1774,8 +1778,12 @@ def test_subparser_dispatches_sweep(monkeypatch):
 
 def test_subparser_dispatches_enum(monkeypatch):
     captured = {}
-    monkeypatch.setattr("recon.cli_enum.main",
-                        lambda argv: captured.setdefault("argv", list(argv)) or 0)
+
+    def fake(argv):
+        captured["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr("recon.cli_enum.main", fake)
     rc = cli_recon.main(["enum", "-t", "10.0.0.1", "-o", "/tmp/e.xlsx"])
     assert rc == 0
     assert captured["argv"] == ["-t", "10.0.0.1", "-o", "/tmp/e.xlsx"]
