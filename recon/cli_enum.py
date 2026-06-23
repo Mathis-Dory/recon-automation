@@ -8,24 +8,53 @@ Pipeline:
   5. Write an Excel workbook (one row per open ip:port) to ``--output``.
 
 If masscan finds zero open ports the workbook is still written (empty) so the
-orchestrator can chain reliably. Probe errors are recorded per row rather
-than aborting the run; ``KeyboardInterrupt`` short-circuits remaining probes.
+orchestrator can chain reliably. Probes run in parallel via a thread pool sized
+by ``--concurrency``; per-host SMB is pre-deduplicated so a single SMB call
+covers both ports 139 and 445. Per-probe errors are recorded per row rather
+than aborting the run; ``KeyboardInterrupt`` cancels in-flight probes cleanly.
 """
 import sys
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from recon import common, scan, probes, enum_core
 
 SMB_PORTS = {139, 445}
 
 
-def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None):
+def _build_probe_jobs(open_ports, web_ports, fns, disabled):
+    """Pre-dispatch planner: return a list of (key, field, callable) jobs.
+
+    Each `(ip, port)` produces at most one job. SMB is deduplicated per IP
+    (only the first SMB port encountered enqueues a job).
+    """
+    jobs = []
+    smb_seen = set()
+    for ip, port in open_ports:
+        if port == 21 and "probe-ftp" not in disabled:
+            jobs.append(((ip, port), "finding", lambda ip=ip, port=port: fns["ftp"](ip, port)))
+        elif port in (22, 23) and "probe-ssh" not in disabled:
+            jobs.append(((ip, port), "finding", lambda ip=ip, port=port: fns["banner"](ip, port)))
+        elif port in web_ports and "probe-web-basic" not in disabled:
+            jobs.append(((ip, port), "http_title", lambda ip=ip, port=port: fns["web"](ip, port)))
+        elif port in SMB_PORTS and ip not in smb_seen and "probe-smb" not in disabled:
+            smb_seen.add(ip)
+            jobs.append(((ip, port), "finding", lambda ip=ip: fns["smb"](ip)))
+    return jobs
+
+
+def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
+                    concurrency=32):
     """Route each open port to its probe; return per-(ip,port) results.
 
     `disabled_probes`, when given, is an iterable of registry probe names
     (`probe-ftp`, `probe-ssh`, `probe-web-basic`, `probe-smb`) that should
     be silently skipped — the corresponding row stays at the default empty
     finding/http_title.
+
+    `concurrency` controls the thread pool size for probe execution. Probes
+    are I/O-bound, so a value of 32 is a reasonable default; values <= 1
+    fall back to sequential execution (useful for debugging).
     """
     fns = probe_fns or {
         "ftp": probes.probe_ftp_anon,
@@ -35,27 +64,29 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None)
     }
     disabled = set(disabled_probes or [])
     results = {key: {"http_title": "", "finding": ""} for key in open_ports}
-    smb_done = set()
-    for ip, port in open_ports:
+    jobs = _build_probe_jobs(open_ports, web_ports, fns, disabled)
+    if not jobs:
+        return results
+
+    max_workers = max(1, min(concurrency, len(jobs)))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(call): (key, field) for key, field, call in jobs}
         try:
-            if port == 21 and "probe-ftp" not in disabled:
-                finding = fns["ftp"](ip, port)
-                if finding:
-                    results[(ip, port)]["finding"] = finding
-            elif port in (22, 23) and "probe-ssh" not in disabled:
-                results[(ip, port)]["finding"] = fns["banner"](ip, port)
-            elif port in web_ports and "probe-web-basic" not in disabled:
-                results[(ip, port)]["http_title"] = fns["web"](ip, port)
-            elif port in SMB_PORTS and ip not in smb_done and "probe-smb" not in disabled:
-                smb_done.add(ip)
-                finding = fns["smb"](ip)
-                if finding:
-                    results[(ip, port)]["finding"] = finding
+            for fut in as_completed(futures):
+                key, field = futures[fut]
+                try:
+                    value = fut.result()
+                except Exception as exc:  # never abort the whole run
+                    results[key]["finding"] = f"probe error: {exc}"
+                    continue
+                if value:
+                    results[key][field] = value
         except KeyboardInterrupt:
-            results[(ip, port)]["finding"] = "INTERRUPTED"
-            break
-        except Exception as exc:  # never abort the whole run
-            results[(ip, port)]["finding"] = f"probe error: {exc}"
+            ex.shutdown(wait=False, cancel_futures=True)
+            for key, _ in futures.values():
+                if not results[key]["finding"] and not results[key]["http_title"]:
+                    results[key]["finding"] = "INTERRUPTED"
+            raise
     return results
 
 
@@ -94,10 +125,23 @@ def build_arg_parser():
                         help="ports treated as HTTP for the web probe (default: built-in web set)")
     parser.add_argument("--rate", dest="rate", type=int, default=1000,
                         help="masscan packet rate in pps (default: 1000)")
+    parser.add_argument("--concurrency", dest="concurrency", type=_positive_int, default=32,
+                        help="probe thread pool size (default: 32; minimum 1)")
     parser.add_argument("--disable-probes", dest="disable_probes", default="",
                         help="comma-separated registry probe names to skip (advanced; "
                              "set automatically by pt-recon)")
     return parser
+
+
+def _positive_int(s):
+    """argparse type: int >= 1."""
+    try:
+        n = int(s)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"expected integer, got {s!r}")
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {n}")
+    return n
 
 
 def main(argv=None):
@@ -131,7 +175,9 @@ def main(argv=None):
 
     nmap_info = scan.run_nmap_sv(open_ports)
     disabled = {p.strip() for p in (args.disable_probes or "").split(",") if p.strip()}
-    probe_results = dispatch_probes(open_ports, web_ports, disabled_probes=disabled)
+    probe_results = dispatch_probes(open_ports, web_ports,
+                                    disabled_probes=disabled,
+                                    concurrency=args.concurrency)
     rows = enum_core.build_rows(open_ports, nmap_info, probe_results)
     out = common.write_enum_workbook(rows, args.output)
     anon = sum(1 for r in rows if any(m in r["finding"].upper() for m in ("ANON", "NULL", "GUEST")))
