@@ -161,7 +161,6 @@ def main(argv=None):
     log = common.get_logger("pt-recon")
 
     outdir = common.engagement_dir(args.name)
-    os.makedirs(outdir, exist_ok=True)
     hosts_file = os.path.join(outdir, "live-hosts.txt")
     enum_xlsx = os.path.join(outdir, "enum.xlsx")
 
@@ -263,8 +262,8 @@ def main(argv=None):
             if stage == "sweep" and os.path.exists(hosts_file) and \
                     os.path.getsize(hosts_file) == 0:
                 log.info("sweep found no live hosts; stopping")
-                manifest.set_exit_code(0)
-                return 0
+                manifest.set_exit_code(overall_rc)
+                return overall_rc
 
         manifest.set_exit_code(overall_rc)
         log.info("recon complete: %s (exit %s)", outdir, overall_rc)
