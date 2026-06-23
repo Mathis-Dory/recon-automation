@@ -31,6 +31,11 @@ _BUILTINS = [
         help="SMB null/guest session check",
         requires=[Soft(Tool("nxc"))],
     ),
+    Module(
+        name="probe-db",
+        stage="enum",
+        help="MySQL/Postgres/MSSQL/Mongo/Redis banners",
+    ),
     Module(name="nuclei", stage="nuclei", help="nuclei template scan"),
     Module(
         name="nessus",
