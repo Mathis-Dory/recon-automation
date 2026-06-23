@@ -22,11 +22,23 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from recon import common, enum_core, probes, probes_db, probes_mail, probes_tls, probes_web, scan
+from recon import (
+    common,
+    enum_core,
+    probes,
+    probes_db,
+    probes_external,
+    probes_mail,
+    probes_tls,
+    probes_web,
+    scan,
+)
 
 SMB_PORTS = {139, 445}
 DB_PORTS = {1433, 3306, 5432, 6379, 27017}
 MAIL_PORTS = {25, 110, 143, 465, 587, 993, 995}
+LDAP_PORTS = {389, 636, 3268}
+WINRM_PORTS = {5985, 5986}
 
 
 @dataclass(frozen=True)
@@ -57,6 +69,10 @@ PROBE_TABLE = (
     ProbeSpec("probe-mail", MAIL_PORTS, "finding", "mail"),
     ProbeSpec("probe-web-deep", None, "finding", "web_deep", append=True),
     ProbeSpec("probe-tls-cert", None, "finding", "tls_cert", append=True),
+    ProbeSpec("probe-ldap", LDAP_PORTS, "finding", "ldap"),
+    ProbeSpec("probe-rdp", {3389}, "finding", "rdp"),
+    ProbeSpec("probe-nfs", {2049}, "finding", "nfs"),
+    ProbeSpec("probe-winrm", WINRM_PORTS, "finding", "winrm"),
 )
 
 
@@ -110,6 +126,10 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
         "mail": probes_mail.probe_mail,
         "web_deep": probes_web.probe_web_deep,
         "tls_cert": probes_tls.probe_tls_cert,
+        "ldap": probes_external.probe_ldap,
+        "rdp": probes_external.probe_rdp,
+        "nfs": probes_external.probe_nfs,
+        "winrm": probes_external.probe_winrm,
     }
     disabled = set(disabled_probes or [])
     table = table if table is not None else PROBE_TABLE

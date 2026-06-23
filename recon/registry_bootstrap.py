@@ -51,6 +51,30 @@ _BUILTINS = [
         stage="enum",
         help="TLS cert subject / SAN / issuer / expiry",
     ),
+    Module(
+        name="probe-ldap",
+        stage="enum",
+        help="anon LDAP bind + RootDSE / domain / functional level",
+        requires=[Soft(Tool("nxc"))],
+    ),
+    Module(
+        name="probe-rdp",
+        stage="enum",
+        help="RDP reachability + NLA / OS hint via nxc",
+        requires=[Soft(Tool("nxc"))],
+    ),
+    Module(
+        name="probe-nfs",
+        stage="enum",
+        help="NFS exports list via showmount -e",
+        requires=[Soft(Tool("showmount"))],
+    ),
+    Module(
+        name="probe-winrm",
+        stage="enum",
+        help="WinRM reachability via nxc winrm",
+        requires=[Soft(Tool("nxc"))],
+    ),
     Module(name="nuclei", stage="nuclei", help="nuclei template scan"),
     Module(
         name="nessus",
