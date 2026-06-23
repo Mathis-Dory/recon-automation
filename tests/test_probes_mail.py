@@ -27,16 +27,16 @@ class _FakeSocket:
 
 
 def _patch_connect(monkeypatch, fake_sock):
-    monkeypatch.setattr(
-        probes_mail, "_connect", lambda ip, port, timeout=4.0: fake_sock
-    )
+    monkeypatch.setattr(probes_mail, "_connect", lambda ip, port, timeout=4.0: fake_sock)
 
 
 def test_probe_smtp_extracts_banner_and_capabilities(monkeypatch):
-    fake = _FakeSocket([
-        b"220 mail.example.com ESMTP Postfix\r\n",
-        b"250-mail.example.com\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-AUTH LOGIN PLAIN\r\n250 HELP\r\n",
-    ])
+    fake = _FakeSocket(
+        [
+            b"220 mail.example.com ESMTP Postfix\r\n",
+            b"250-mail.example.com\r\n250-PIPELINING\r\n250-STARTTLS\r\n250-AUTH LOGIN PLAIN\r\n250 HELP\r\n",
+        ]
+    )
     _patch_connect(monkeypatch, fake)
     result = probes_mail.probe_smtp("10.0.0.1", 25)
     assert result.startswith("SMTP(25):")
@@ -47,10 +47,12 @@ def test_probe_smtp_extracts_banner_and_capabilities(monkeypatch):
 
 
 def test_probe_smtp_no_starttls(monkeypatch):
-    fake = _FakeSocket([
-        b"220 mx.local ESMTP\r\n",
-        b"250-mx.local\r\n250-PIPELINING\r\n250 HELP\r\n",
-    ])
+    fake = _FakeSocket(
+        [
+            b"220 mx.local ESMTP\r\n",
+            b"250-mx.local\r\n250-PIPELINING\r\n250 HELP\r\n",
+        ]
+    )
     _patch_connect(monkeypatch, fake)
     result = probes_mail.probe_smtp("10.0.0.1", 25)
     assert "STARTTLS" not in result
@@ -70,10 +72,12 @@ def test_probe_smtp_handles_non_220_greeting(monkeypatch):
 
 
 def test_probe_imap_extracts_banner_and_capabilities(monkeypatch):
-    fake = _FakeSocket([
-        b"* OK [CAPABILITY IMAP4rev1] Dovecot ready\r\n",
-        b"* CAPABILITY IMAP4rev1 STARTTLS AUTH=PLAIN AUTH=LOGIN\r\na1 OK Capability completed\r\n",
-    ])
+    fake = _FakeSocket(
+        [
+            b"* OK [CAPABILITY IMAP4rev1] Dovecot ready\r\n",
+            b"* CAPABILITY IMAP4rev1 STARTTLS AUTH=PLAIN AUTH=LOGIN\r\na1 OK Capability completed\r\n",
+        ]
+    )
     _patch_connect(monkeypatch, fake)
     result = probes_mail.probe_imap("10.0.0.1", 143)
     assert result.startswith("IMAP(143):")
@@ -90,10 +94,12 @@ def test_probe_imap_handles_unexpected_greeting(monkeypatch):
 
 
 def test_probe_pop_extracts_banner_and_capabilities(monkeypatch):
-    fake = _FakeSocket([
-        b"+OK POP3 ready Dovecot\r\n",
-        b"+OK\r\nUSER\r\nSTLS\r\nTOP\r\n.\r\n",
-    ])
+    fake = _FakeSocket(
+        [
+            b"+OK POP3 ready Dovecot\r\n",
+            b"+OK\r\nUSER\r\nSTLS\r\nTOP\r\n.\r\n",
+        ]
+    )
     _patch_connect(monkeypatch, fake)
     result = probes_mail.probe_pop("10.0.0.1", 110)
     assert result.startswith("POP3(110):")
@@ -103,10 +109,12 @@ def test_probe_pop_extracts_banner_and_capabilities(monkeypatch):
 
 
 def test_probe_pop_no_stls(monkeypatch):
-    fake = _FakeSocket([
-        b"+OK POP3 ready\r\n",
-        b"+OK\r\nUSER\r\nTOP\r\n.\r\n",
-    ])
+    fake = _FakeSocket(
+        [
+            b"+OK POP3 ready\r\n",
+            b"+OK\r\nUSER\r\nTOP\r\n.\r\n",
+        ]
+    )
     _patch_connect(monkeypatch, fake)
     result = probes_mail.probe_pop("10.0.0.1", 110)
     assert "STLS" not in result
@@ -116,12 +124,13 @@ def test_probe_pop_no_stls(monkeypatch):
 def test_probe_mail_dispatches_by_port(monkeypatch):
     """probe_mail's port → handler routing."""
     smtp_calls, imap_calls, pop_calls = [], [], []
-    monkeypatch.setattr(probes_mail, "probe_smtp",
-                        lambda ip, p, **_kw: smtp_calls.append(p) or "smtp")
-    monkeypatch.setattr(probes_mail, "probe_imap",
-                        lambda ip, p, **_kw: imap_calls.append(p) or "imap")
-    monkeypatch.setattr(probes_mail, "probe_pop",
-                        lambda ip, p, **_kw: pop_calls.append(p) or "pop")
+    monkeypatch.setattr(
+        probes_mail, "probe_smtp", lambda ip, p, **_kw: smtp_calls.append(p) or "smtp"
+    )
+    monkeypatch.setattr(
+        probes_mail, "probe_imap", lambda ip, p, **_kw: imap_calls.append(p) or "imap"
+    )
+    monkeypatch.setattr(probes_mail, "probe_pop", lambda ip, p, **_kw: pop_calls.append(p) or "pop")
     assert probes_mail.probe_mail("1.1.1.1", 25) == "smtp"
     assert probes_mail.probe_mail("1.1.1.1", 587) == "smtp"
     assert probes_mail.probe_mail("1.1.1.1", 143) == "imap"

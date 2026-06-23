@@ -18,9 +18,9 @@ per row; ``KeyboardInterrupt`` cancels in-flight probes cleanly.
 
 import argparse
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 from recon import (
     common,
@@ -29,6 +29,7 @@ from recon import (
     probes_db,
     probes_external,
     probes_mail,
+    probes_smb_depth,
     probes_tls,
     probes_web,
     scan,
@@ -46,7 +47,7 @@ class ProbeSpec:
     """How a probe attaches to the dispatch loop."""
 
     name: str  # registry name (e.g. "probe-ftp")
-    ports: Optional[set]  # explicit port set, or None for "web_ports"
+    ports: set | None  # explicit port set, or None for "web_ports"
     field: str  # "finding" or "http_title"
     fn_key: str  # key into the probe_fns dict
     per_host: bool = False  # dedupe by IP (first matching port wins)
@@ -73,6 +74,10 @@ PROBE_TABLE = (
     ProbeSpec("probe-rdp", {3389}, "finding", "rdp"),
     ProbeSpec("probe-nfs", {2049}, "finding", "nfs"),
     ProbeSpec("probe-winrm", WINRM_PORTS, "finding", "winrm"),
+    # SMB depth — per-host, append alongside probe-smb's null/guest finding.
+    ProbeSpec("probe-smb-signing", {445}, "finding", "smb_signing", per_host=True, append=True),
+    ProbeSpec("probe-smb-passpol", {445}, "finding", "smb_passpol", per_host=True, append=True),
+    ProbeSpec("probe-smb-rid", {445}, "finding", "smb_rid", per_host=True, append=True),
 )
 
 
@@ -91,11 +96,13 @@ def _build_probe_jobs(open_ports, web_ports, fns, disabled, table):
                 if ip in seen:
                     continue
                 seen.add(ip)
-                jobs.append(((ip, port), spec.field, spec.append,
-                             _bind(spec.fn_key, fns, ip, None)))
+                jobs.append(
+                    ((ip, port), spec.field, spec.append, _bind(spec.fn_key, fns, ip, None))
+                )
             else:
-                jobs.append(((ip, port), spec.field, spec.append,
-                             _bind(spec.fn_key, fns, ip, port)))
+                jobs.append(
+                    ((ip, port), spec.field, spec.append, _bind(spec.fn_key, fns, ip, port))
+                )
     return jobs
 
 
@@ -106,8 +113,9 @@ def _bind(fn_key, fns, ip, port) -> Callable:
     return lambda: fns[fn_key](ip, port)
 
 
-def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None, concurrency=32,
-                    table=None):
+def dispatch_probes(
+    open_ports, web_ports, probe_fns=None, disabled_probes=None, concurrency=32, table=None
+):
     """Route each open port to its probe(s); return per-(ip,port) results.
 
     Multiple probes may target the same (ip, port). Probes with `append=True`
@@ -130,6 +138,9 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
         "rdp": probes_external.probe_rdp,
         "nfs": probes_external.probe_nfs,
         "winrm": probes_external.probe_winrm,
+        "smb_signing": probes_smb_depth.probe_smb_signing,
+        "smb_passpol": probes_smb_depth.probe_smb_passpol,
+        "smb_rid": probes_smb_depth.probe_smb_rid,
     }
     disabled = set(disabled_probes or [])
     table = table if table is not None else PROBE_TABLE

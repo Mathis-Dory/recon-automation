@@ -13,8 +13,10 @@ def _patch_run(monkeypatch, output):
 
 def _patch_run_per_cmd(monkeypatch, by_first_arg):
     """Branch _run by the binary name (cmd[0])."""
+
     def fake(cmd, timeout=30.0):
         return by_first_arg.get(cmd[0])
+
     monkeypatch.setattr(probes_external, "_run", fake)
 
 

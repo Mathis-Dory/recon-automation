@@ -1,10 +1,6 @@
 """Tests for recon/probes_db.py — DB banner probes mocked at the socket layer."""
 
-import socket
 import struct
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from recon import probes_db
 
@@ -36,9 +32,7 @@ class _FakeSocket:
 
 
 def _patch_connect(monkeypatch, fake_sock):
-    monkeypatch.setattr(
-        probes_db, "_connect", lambda ip, port, timeout=4.0: fake_sock
-    )
+    monkeypatch.setattr(probes_db, "_connect", lambda ip, port, timeout=4.0: fake_sock)
 
 
 def test_probe_mysql_extracts_version(monkeypatch):
