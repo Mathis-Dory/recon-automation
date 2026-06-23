@@ -182,6 +182,52 @@ def test_orchestrator_target_parse_error_exits_2(tmp_path, monkeypatch):
     assert rc == 2
 
 
+def test_orchestrator_exits_2_when_targets_out_of_scope(tmp_path, monkeypatch):
+    outdir = tmp_path / "eng"
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.5", "192.168.1.10"])
+    scope = tmp_path / "scope.txt"
+    scope.write_text("10.0.0.0/24\n")  # 192.168.1.10 is OUT of scope
+    sweep_called = []
+    monkeypatch.setattr("recon.cli_sweep.main", lambda a: sweep_called.append(a) or 0)
+
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
+                         "--scope-file", str(scope)])
+
+    assert rc == 2
+    assert sweep_called == [], "no stage should run when targets are out of scope"
+
+
+def test_orchestrator_scope_file_missing_exits_2(tmp_path, monkeypatch):
+    monkeypatch.setattr("recon.common.engagement_dir",
+                        lambda name, root=None: str(tmp_path / "eng"))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.5"])
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
+                         "--scope-file", str(tmp_path / "nope.txt")])
+    assert rc == 2
+
+
+def test_orchestrator_in_scope_targets_proceed(tmp_path, monkeypatch, stub_tools_present):
+    outdir = tmp_path / "eng"
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.5"])
+    scope = tmp_path / "scope.txt"
+    scope.write_text("10.0.0.0/24\n")
+
+    def fake_sweep(argv):
+        idx = argv.index("-o")
+        with open(argv[idx + 1], "w") as fh:
+            fh.write("")  # empty → short-circuit
+        return 0
+
+    monkeypatch.setattr("recon.cli_sweep.main", fake_sweep)
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
+                         "--scope-file", str(scope)])
+    assert rc == 0  # sweep ran and short-circuited cleanly
+
+
 def test_list_modules_prints_table_and_exits_zero(capsys):
     rc = cli_recon.main(["--list-modules"])
     assert rc == 0

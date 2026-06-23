@@ -87,6 +87,8 @@ def build_arg_parser():
     parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
     parser.add_argument("--outdir", dest="outdir",
                         help="engagement output root (default: $PT_RECON_OUTPUT or ~/tools/recon/output)")
+    parser.add_argument("--scope-file", dest="scope_file",
+                        help="allow-list of CIDRs (one per line; # comments); abort if any target is outside")
     parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                         help="print planned stages, enabled modules, and skip reasons; do not run anything")
     parser.add_argument("--list-modules", dest="list_modules", action="store_true",
@@ -198,6 +200,20 @@ def main(argv=None):
     except (ValueError, FileNotFoundError) as exc:
         log.error("target parse error: %s", exc)
         return 2
+
+    # Enforce scope file before any stage runs.
+    if args.scope_file:
+        try:
+            scope_nets = common.load_scope(args.scope_file)
+        except (ValueError, FileNotFoundError) as exc:
+            log.error("scope file error: %s", exc)
+            return 2
+        out_of_scope = [ip for ip in targets if not common.targets_in_scope(ip, scope_nets)]
+        if out_of_scope:
+            shown = ", ".join(out_of_scope[:5])
+            extra = "" if len(out_of_scope) <= 5 else f" (+{len(out_of_scope) - 5} more)"
+            log.error("targets out of scope: %s%s", shown, extra)
+            return 2
 
     targets_source = " ".join(
         flag for flag in (

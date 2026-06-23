@@ -124,6 +124,30 @@ DEFAULT_OUTPUT_ROOT = "~/tools/recon/output"
 _OUTPUT_ROOT_ENV = "PT_RECON_OUTPUT"
 
 
+def load_scope(path):
+    """Load an allow-list of CIDR networks from `path`.
+
+    File format: one CIDR per line; `#` introduces a comment; blank lines ignored.
+    Same shape as `-iL` for symmetry. Raises ValueError on a bad network token.
+    """
+    nets = []
+    with open(path) as fh:
+        for line in fh:
+            tok = line.split("#", 1)[0].strip()
+            if not tok:
+                continue
+            nets.append(ipaddress.ip_network(tok, strict=False))
+    return nets
+
+
+def targets_in_scope(ip, nets):
+    """Return True if `ip` (string) falls inside any of the given networks."""
+    if not nets:
+        return False
+    addr = ipaddress.ip_address(ip)
+    return any(addr in net for net in nets)
+
+
 def engagement_dir(name, root=None):
     """Create and return the output directory for an engagement.
 
