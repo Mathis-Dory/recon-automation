@@ -209,6 +209,120 @@ def test_orchestrator_scope_file_missing_exits_2(tmp_path, monkeypatch):
     assert rc == 2
 
 
+def test_resume_skips_completed_sweep_and_enum(tmp_path, monkeypatch, stub_tools_present):
+    """With --resume and a prior run.json showing sweep/enum ok, only nuclei runs."""
+    import json
+    outdir = tmp_path / "eng"
+    outdir.mkdir()
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
+
+    # Seed prior run.json + artifacts on disk.
+    (outdir / "live-hosts.txt").write_text("10.0.0.1\n")
+    (outdir / "enum.xlsx").write_text("placeholder")
+    (outdir / "run.json").write_text(json.dumps({
+        "engagement": "eng",
+        "started_at": "2026-06-23T00:00:00Z",
+        "finished_at": None,
+        "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
+        "stages": [
+            {"name": "sweep", "status": "ok", "elapsed_s": 1.0,
+             "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0},
+            {"name": "enum", "status": "ok", "elapsed_s": 2.5,
+             "modules_run": ["masscan"], "modules_skipped": [], "exit_code": 0},
+        ],
+        "exit_code": None,
+    }))
+
+    sweep_called = []
+    enum_called = []
+    nuclei_called = []
+    monkeypatch.setattr("recon.cli_sweep.main", lambda a: sweep_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_enum.main", lambda a: enum_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_nuclei.main", lambda a: nuclei_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_nessus.main", lambda a: 0)
+    monkeypatch.setattr("recon.cli_smb.main", lambda a: 0)
+
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--resume"])
+    assert rc == 0
+    assert sweep_called == [], "completed sweep should be skipped under --resume"
+    assert enum_called == [], "completed enum should be skipped under --resume"
+    assert len(nuclei_called) == 1, "nuclei was not previously complete and should run"
+
+    # Manifest preserves the prior stage records.
+    manifest = json.loads((outdir / "run.json").read_text())
+    stage_names = [s["name"] for s in manifest["stages"]]
+    assert stage_names.count("sweep") == 1
+    assert stage_names.count("enum") == 1
+
+
+def test_resume_reruns_stage_when_artifact_missing(tmp_path, monkeypatch, stub_tools_present):
+    """status=ok in manifest but artifact deleted from disk → stage re-runs."""
+    import json
+    outdir = tmp_path / "eng"
+    outdir.mkdir()
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
+
+    # Manifest says sweep was ok, but live-hosts.txt is missing.
+    (outdir / "run.json").write_text(json.dumps({
+        "engagement": "eng",
+        "started_at": "2026-06-23T00:00:00Z",
+        "finished_at": None,
+        "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
+        "stages": [
+            {"name": "sweep", "status": "ok", "elapsed_s": 1.0,
+             "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0},
+        ],
+        "exit_code": None,
+    }))
+
+    def fake_sweep(argv):
+        idx = argv.index("-o")
+        with open(argv[idx + 1], "w") as fh:
+            fh.write("")  # empty → short-circuit
+        return 0
+
+    sweep_called = []
+
+    def wrapper(a):
+        sweep_called.append(a)
+        return fake_sweep(a)
+
+    monkeypatch.setattr("recon.cli_sweep.main", wrapper)
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--resume"])
+    assert rc == 0
+    assert len(sweep_called) == 1, "sweep should re-run when artifact is missing"
+
+
+def test_no_resume_flag_overwrites_prior_run_json(tmp_path, monkeypatch, stub_tools_present):
+    """Without --resume, prior run.json is overwritten with a fresh stages list."""
+    import json
+    outdir = tmp_path / "eng"
+    outdir.mkdir()
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
+    (outdir / "run.json").write_text(json.dumps({
+        "engagement": "eng",
+        "stages": [{"name": "sweep", "status": "ok", "elapsed_s": 1.0,
+                    "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0}],
+        "exit_code": None,
+    }))
+    (outdir / "live-hosts.txt").write_text("10.0.0.1\n")
+
+    sweep_called = []
+    monkeypatch.setattr("recon.cli_sweep.main",
+                        lambda a: sweep_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_enum.main",
+                        lambda a: (open(a[a.index("-o") + 1], "w").close() or 0))
+    monkeypatch.setattr("recon.cli_nuclei.main", lambda a: 0)
+    monkeypatch.setattr("recon.cli_nessus.main", lambda a: 0)
+    monkeypatch.setattr("recon.cli_smb.main", lambda a: 0)
+
+    cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])  # no --resume
+    assert len(sweep_called) == 1, "without --resume, sweep should run from scratch"
+
+
 def test_orchestrator_in_scope_targets_proceed(tmp_path, monkeypatch, stub_tools_present):
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))

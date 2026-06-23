@@ -15,6 +15,16 @@ def _default_clock() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Artifact each stage writes; used by --resume to confirm completion on disk.
+STAGE_ARTIFACTS = {
+    "sweep": "live-hosts.txt",
+    "enum": "enum.xlsx",
+    "nuclei": "nuclei.jsonl",
+    "smb": "smb.xlsx",
+    # nessus has no local artifact — completion relies on status alone
+}
+
+
 class RunManifest:
     """Incrementally-written run.json describing one orchestrator invocation."""
 
@@ -22,6 +32,7 @@ class RunManifest:
                  targets_count: int, targets_source: str,
                  *, clock: Optional[Callable[[], datetime]] = None) -> None:
         self._clock = clock or _default_clock
+        self.outdir = outdir
         self.path = os.path.join(outdir, "run.json")
         self._data: Dict = {
             "engagement": engagement,
@@ -33,18 +44,70 @@ class RunManifest:
         }
         self.write()
 
+    @classmethod
+    def from_existing(cls, engagement: str, outdir: str,
+                      targets_count: int, targets_source: str,
+                      *, clock: Optional[Callable[[], datetime]] = None) -> "RunManifest":
+        """Load any prior run.json under `outdir`, preserving its stages list.
+
+        If no run.json exists, behaves like the normal constructor — a fresh
+        manifest is written. Useful for ``--resume``: prior stage records are
+        kept; subsequent ``add_stage`` calls replace records by name.
+        """
+        path = os.path.join(outdir, "run.json")
+        if not os.path.exists(path):
+            return cls(engagement, outdir, targets_count, targets_source, clock=clock)
+        inst = cls.__new__(cls)
+        inst._clock = clock or _default_clock
+        inst.outdir = outdir
+        inst.path = path
+        try:
+            with open(path) as fh:
+                inst._data = json.load(fh)
+        except (OSError, ValueError):
+            # Corrupt or unreadable — fall back to a fresh manifest.
+            return cls(engagement, outdir, targets_count, targets_source, clock=clock)
+        # Refresh the targets metadata for the new run while keeping stage history.
+        inst._data["engagement"] = engagement
+        inst._data["targets"] = {"count": targets_count, "source": targets_source}
+        inst._data["exit_code"] = None
+        inst._data["finished_at"] = None
+        inst._data.setdefault("stages", [])
+        return inst
+
+    def is_stage_complete(self, name: str) -> bool:
+        """True iff a prior record for `name` is `status=ok` AND its artifact exists.
+
+        Stages with no on-disk artifact (e.g. nessus) require only the status check.
+        """
+        record = next((s for s in self._data["stages"] if s.get("name") == name), None)
+        if record is None or record.get("status") != "ok":
+            return False
+        artifact = STAGE_ARTIFACTS.get(name)
+        if artifact is None:
+            return True
+        return os.path.exists(os.path.join(self.outdir, artifact))
+
     def add_stage(self, name: str, status: str, elapsed_s: float,
                   modules_run: List[str],
                   modules_skipped: List[Dict[str, str]],
                   exit_code: Optional[int]) -> None:
-        self._data["stages"].append({
+        record = {
             "name": name,
             "status": status,
             "elapsed_s": round(float(elapsed_s), 2),
             "modules_run": list(modules_run),
             "modules_skipped": list(modules_skipped),
             "exit_code": exit_code,
-        })
+        }
+        # Replace any prior record for the same stage (resume re-run case).
+        stages = self._data["stages"]
+        for i, prior in enumerate(stages):
+            if prior.get("name") == name:
+                stages[i] = record
+                break
+        else:
+            stages.append(record)
         self.write()
 
     def set_exit_code(self, code: int) -> None:

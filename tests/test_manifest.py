@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime
 
 from recon.manifest import RunManifest, attach_run_log
@@ -84,6 +85,61 @@ def test_attach_run_log_formats_warning_as_warn(tmp_path):
     finally:
         logger.removeHandler(handler)
         handler.close()
+
+
+def test_manifest_from_existing_loads_prior_stages(tmp_path):
+    from recon.manifest import RunManifest
+    from datetime import datetime
+    clk = lambda: datetime(2026, 6, 23, 12, 0, 0)
+    # First run: write sweep and enum as ok.
+    m1 = RunManifest("acme", str(tmp_path), 5, "-r 10.0.0.0/30", clock=clk)
+    m1.add_stage("sweep", "ok", 1.0, ["sweep"], [], 0)
+    m1.add_stage("enum", "ok", 2.5, ["probe-ftp"], [], 0)
+    # Second invocation with --resume: from_existing keeps prior stages.
+    m2 = RunManifest.from_existing("acme", str(tmp_path), 5, "-r 10.0.0.0/30", clock=clk)
+    names = [s["name"] for s in m2._data["stages"]]
+    assert names == ["sweep", "enum"]
+    assert m2._data["targets"] == {"count": 5, "source": "-r 10.0.0.0/30"}
+    # exit_code resets so the new run's outcome overwrites cleanly.
+    assert m2._data["exit_code"] is None
+
+
+def test_manifest_from_existing_handles_missing_file(tmp_path):
+    from recon.manifest import RunManifest
+    m = RunManifest.from_existing("acme", str(tmp_path), 1, "-t 1.1.1.1")
+    assert m._data["stages"] == []
+    assert os.path.exists(m.path)  # written as a placeholder
+
+
+def test_manifest_is_stage_complete_requires_status_ok_and_artifact(tmp_path):
+    import json
+    from recon.manifest import RunManifest
+    from datetime import datetime
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
+                    clock=lambda: datetime(2026, 6, 23))
+    m.add_stage("sweep", "ok", 1.0, ["sweep"], [], 0)
+    assert m.is_stage_complete("sweep") is False  # artifact missing
+    (tmp_path / "live-hosts.txt").write_text("10.0.0.1\n")
+    assert m.is_stage_complete("sweep") is True
+    # error stage never counts as complete
+    m.add_stage("enum", "error", 0.1, ["probe-ftp"], [], 1)
+    assert m.is_stage_complete("enum") is False
+    # nessus has no artifact, status alone is sufficient
+    m.add_stage("nessus", "ok", 0.5, ["nessus"], [], 0)
+    assert m.is_stage_complete("nessus") is True
+
+
+def test_manifest_add_stage_replaces_prior_record_for_same_name(tmp_path):
+    from recon.manifest import RunManifest
+    from datetime import datetime
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
+                    clock=lambda: datetime(2026, 6, 23))
+    m.add_stage("sweep", "error", 0.5, ["sweep"], [], 1)
+    m.add_stage("sweep", "ok", 0.3, ["sweep"], [], 0)
+    sweeps = [s for s in m._data["stages"] if s["name"] == "sweep"]
+    assert len(sweeps) == 1
+    assert sweeps[0]["status"] == "ok"
+    assert sweeps[0]["exit_code"] == 0
 
 
 def test_attach_run_log_is_idempotent_for_same_path(tmp_path):
