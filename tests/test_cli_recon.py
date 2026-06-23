@@ -216,3 +216,47 @@ def test_dry_run_shows_auto_skip_reasons(tmp_path, monkeypatch, capsys):
     assert "access_key" in out or "nessus.access_key" in out
     assert "smb-mass" in out
     assert "nxc" in out
+
+
+def test_subparser_dispatches_sweep(monkeypatch):
+    captured = {}
+
+    def fake(argv):
+        captured["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr("recon.cli_sweep.main", fake)
+    rc = cli_recon.main(["sweep", "-r", "10.0.0.0/30", "-o", "/tmp/x"])
+    assert rc == 0
+    assert captured["argv"] == ["-r", "10.0.0.0/30", "-o", "/tmp/x"]
+
+
+def test_subparser_dispatches_enum(monkeypatch):
+    captured = {}
+
+    def fake(argv):
+        captured["argv"] = list(argv)
+        return 0
+
+    monkeypatch.setattr("recon.cli_enum.main", fake)
+    rc = cli_recon.main(["enum", "-t", "10.0.0.1", "-o", "/tmp/e.xlsx"])
+    assert rc == 0
+    assert captured["argv"] == ["-t", "10.0.0.1", "-o", "/tmp/e.xlsx"]
+
+
+def test_subparser_propagates_exit_code(monkeypatch):
+    monkeypatch.setattr("recon.cli_nuclei.main", lambda argv: 7)
+    rc = cli_recon.main(["nuclei", "-iL", "/tmp/h.txt"])
+    assert rc == 7
+
+
+def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path):
+    """`pt-recon -n foo -r ...` (no subcommand) still works as before."""
+    monkeypatch.setattr("recon.common.engagement_dir",
+                        lambda name: str(tmp_path / "eng"))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.cli_sweep.main",
+                        lambda a: (open(a[a.index("-o") + 1], "w").write("") or 0))
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])
+    assert rc == 0  # sweep with empty result short-circuits
