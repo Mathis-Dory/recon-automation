@@ -40,6 +40,20 @@ def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog="pt-recon",
         description="Recon orchestrator (registry-driven).",
+        epilog=(
+            "subcommands (ad-hoc per-stage runs):\n"
+            "  pt-recon sweep  ARGS    run only the sweep stage\n"
+            "  pt-recon enum   ARGS    run only the enum stage\n"
+            "  pt-recon nuclei ARGS    run only the nuclei stage\n"
+            "  pt-recon nessus ARGS    run only the nessus stage\n"
+            "  pt-recon smb    ARGS    run only the smb stage\n"
+            "\n"
+            "exit codes:\n"
+            "  0   every attempted stage succeeded\n"
+            "  1   ≥1 stage exited non-zero\n"
+            "  2   argument / target / config error\n"
+            "  130 interrupted (Ctrl-C)\n"
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("-n", "--name", help="engagement name (required unless --list-modules)")
@@ -129,6 +143,11 @@ def _print_module_table():
 
 
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] in _STAGE_MAIN:
+        stage = argv[0]
+        return _STAGE_MAIN[stage](argv[1:])
     args = build_arg_parser().parse_args(argv)
 
     if args.list_modules:
