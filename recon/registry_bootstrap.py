@@ -41,6 +41,16 @@ _BUILTINS = [
         stage="enum",
         help="SMTP/IMAP/POP3 banners + STARTTLS capability",
     ),
+    Module(
+        name="probe-web-deep",
+        stage="enum",
+        help="server header / Set-Cookie / robots.txt / favicon hash",
+    ),
+    Module(
+        name="probe-tls-cert",
+        stage="enum",
+        help="TLS cert subject / SAN / issuer / expiry",
+    ),
     Module(name="nuclei", stage="nuclei", help="nuclei template scan"),
     Module(
         name="nessus",
