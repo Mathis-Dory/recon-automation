@@ -56,7 +56,7 @@ def test_target_args_ignores_empty_hosts_file(tmp_path):
 def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch, stub_tools_present):
     """Default invocation: every stage runs (or auto-skips with a reason)."""
     outdir = tmp_path / "eng"
-    monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
 
@@ -95,7 +95,7 @@ def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch, stub_too
 
 def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_tools_present):
     outdir = tmp_path / "eng"
-    monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
     captured = {}
@@ -129,7 +129,7 @@ def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_
 
 def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypatch):
     outdir = tmp_path / "eng"
-    monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
     # Force nessus skip by clobbering config_loader path to a non-existent file.
@@ -172,7 +172,7 @@ def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypat
 
 def test_orchestrator_target_parse_error_exits_2(tmp_path, monkeypatch):
     monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name: str(tmp_path / "eng"))
+                        lambda name, root=None: str(tmp_path / "eng"))
 
     def boom(*_args):
         raise ValueError("no targets")
@@ -198,7 +198,7 @@ def test_list_modules_prints_table_and_exits_zero(capsys):
 
 def test_dry_run_prints_plan_and_exits_zero(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name: str(tmp_path / "eng"))
+                        lambda name, root=None: str(tmp_path / "eng"))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
     # nothing should actually run
@@ -215,7 +215,7 @@ def test_dry_run_prints_plan_and_exits_zero(tmp_path, monkeypatch, capsys):
 
 def test_dry_run_shows_auto_skip_reasons(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name: str(tmp_path / "eng"))
+                        lambda name, root=None: str(tmp_path / "eng"))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
     monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH",
@@ -270,7 +270,7 @@ def test_subparser_propagates_exit_code(monkeypatch):
 def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkeypatch, stub_tools_present):
     """If sweep exits non-zero but writes an empty hosts file, overall exit must be 1 (not 0)."""
     outdir = tmp_path / "eng"
-    monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
 
@@ -303,7 +303,7 @@ def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkey
 def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path, stub_tools_present):
     """`pt-recon -n foo -r ...` (no subcommand) still works as before."""
     monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name: str(tmp_path / "eng"))
+                        lambda name, root=None: str(tmp_path / "eng"))
     monkeypatch.setattr("recon.common.parse_targets",
                         lambda r, t, i: ["10.0.0.1"])
     monkeypatch.setattr("recon.cli_sweep.main",

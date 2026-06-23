@@ -120,12 +120,20 @@ def load_nessus_config(path=DEFAULT_CONFIG_PATH):
     return cfg
 
 
-DEFAULT_OUTPUT_ROOT = os.path.expanduser("~/tools/recon/output")
+DEFAULT_OUTPUT_ROOT = "~/tools/recon/output"
+_OUTPUT_ROOT_ENV = "PT_RECON_OUTPUT"
 
 
-def engagement_dir(name, root=DEFAULT_OUTPUT_ROOT):
-    """Create and return the output directory for an engagement."""
-    path = os.path.join(root, name)
+def engagement_dir(name, root=None):
+    """Create and return the output directory for an engagement.
+
+    Precedence (highest first):
+      1. ``root`` argument (typically from ``--outdir``)
+      2. ``$PT_RECON_OUTPUT`` env var
+      3. ``DEFAULT_OUTPUT_ROOT`` (~/tools/recon/output)
+    """
+    chosen = root or os.environ.get(_OUTPUT_ROOT_ENV) or DEFAULT_OUTPUT_ROOT
+    path = os.path.join(os.path.expanduser(chosen), name)
     os.makedirs(path, exist_ok=True)
     return path
 

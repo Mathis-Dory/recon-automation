@@ -85,6 +85,8 @@ def build_arg_parser():
     parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
     parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
     parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
+    parser.add_argument("--outdir", dest="outdir",
+                        help="engagement output root (default: $PT_RECON_OUTPUT or ~/tools/recon/output)")
     parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                         help="print planned stages, enabled modules, and skip reasons; do not run anything")
     parser.add_argument("--list-modules", dest="list_modules", action="store_true",
@@ -186,7 +188,7 @@ def main(argv=None):
 
     log = common.get_logger("pt-recon")
 
-    outdir = common.engagement_dir(args.name)
+    outdir = common.engagement_dir(args.name, root=args.outdir)
     hosts_file = os.path.join(outdir, "live-hosts.txt")
     enum_xlsx = os.path.join(outdir, "enum.xlsx")
 
