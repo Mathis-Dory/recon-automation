@@ -1,7 +1,8 @@
 # Pentest Recon Automation Suite
 
-Python CLI tools for authorized lab/redteam recon. See
-`docs/specs/2026-06-19-pentest-recon-automation-design.md`.
+Python CLI tools for authorized lab/redteam recon. Architecture documented
+under [`docs/specs/`](docs/specs/); implementation plans under
+[`docs/plans/`](docs/plans/).
 
 Tool: `pt-recon` — registry-driven recon orchestrator. All stages are
 default-on (auto-skip if their prerequisites are missing).

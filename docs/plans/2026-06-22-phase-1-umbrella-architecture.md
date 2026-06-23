@@ -1,8 +1,6 @@
 # Phase 1 — Umbrella Architecture Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development (recommended) or executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Goal:** Land the umbrella architecture from `docs/specs/2026-06-22-recon-modules-umbrella-design.md` — a module registry, registry-driven flag generation in `pt-recon`, subparser routing for ad-hoc per-stage runs, `run.json` / `run.log` per engagement, `nessus` and `smb` flipped default-on with auto-skip on missing prerequisites, and the per-tool `bin/pt-*` binaries deleted. No new probes in this phase.
+**Goal:** Land the umbrella architecture from [`docs/specs/2026-06-22-recon-modules-umbrella-design.md`](../specs/2026-06-22-recon-modules-umbrella-design.md) — a module registry, registry-driven flag generation in `pt-recon`, subparser routing for ad-hoc per-stage runs, `run.json` / `run.log` per engagement, `nessus` and `smb` flipped default-on with auto-skip on missing prerequisites, and the per-tool `bin/pt-*` binaries deleted. No new probes in this phase.
 
 **Architecture:** Add `recon/modules.py` exposing a `Module` dataclass, `Requirement` union (`Tool`, `ConfigKey`, `Soft`), a `Registry` class, and a `@module(...)` decorator. Register the existing stages and probes in a side-effect-only `recon/registry_bootstrap.py` that `recon/__init__.py` imports on package load. Rewire `cli_recon.py` to generate argparse flags from the registry, iterate stages with auto-skip on missing prereqs, and emit a `run.json` manifest plus a `run.log` tee via `recon/manifest.py`. Extend `cli_enum.main` with a `--disable-probes` flag so the orchestrator can communicate which probes to skip when stage `enum` runs.
 
