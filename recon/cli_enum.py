@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from recon import common, enum_core, probes, probes_db, probes_mail, scan
+from recon import common, enum_core, probes, probes_db, probes_mail, probes_tls, probes_web, scan
 
 SMB_PORTS = {139, 445}
 DB_PORTS = {1433, 3306, 5432, 6379, 27017}
@@ -55,6 +55,8 @@ PROBE_TABLE = (
     ProbeSpec("probe-smb", SMB_PORTS, "finding", "smb", per_host=True),
     ProbeSpec("probe-db", DB_PORTS, "finding", "db"),
     ProbeSpec("probe-mail", MAIL_PORTS, "finding", "mail"),
+    ProbeSpec("probe-web-deep", None, "finding", "web_deep", append=True),
+    ProbeSpec("probe-tls-cert", None, "finding", "tls_cert", append=True),
 )
 
 
@@ -106,6 +108,8 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
         "smb": probes.probe_smb,
         "db": probes_db.probe_db,
         "mail": probes_mail.probe_mail,
+        "web_deep": probes_web.probe_web_deep,
+        "tls_cert": probes_tls.probe_tls_cert,
     }
     disabled = set(disabled_probes or [])
     table = table if table is not None else PROBE_TABLE
