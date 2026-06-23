@@ -293,3 +293,36 @@ def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path)
                         lambda a: (open(a[a.index("-o") + 1], "w").write("") or 0))
     rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])
     assert rc == 0  # sweep with empty result short-circuits
+
+
+class _FakeStream:
+    def __init__(self, is_tty):
+        self._tty = is_tty
+        self.buf = []
+
+    def isatty(self):
+        return self._tty
+
+    def write(self, s):
+        self.buf.append(s)
+
+    def flush(self):
+        pass
+
+    def getvalue(self):
+        return "".join(self.buf)
+
+
+def test_banner_prints_when_stream_is_a_tty():
+    fake = _FakeStream(is_tty=True)
+    cli_recon._print_banner(stream=fake)
+    out = fake.getvalue()
+    # Tagline is plain text; the figlet header is ASCII art with no literal "pt-recon" substring.
+    assert "pentest recon automation" in out
+    assert "v" in out  # version line present
+
+
+def test_banner_suppressed_when_stream_is_not_tty():
+    fake = _FakeStream(is_tty=False)
+    cli_recon._print_banner(stream=fake)
+    assert fake.getvalue() == ""

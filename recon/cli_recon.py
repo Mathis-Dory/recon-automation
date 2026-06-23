@@ -20,10 +20,35 @@ from recon.modules import (
     Skip,
 )
 from recon.manifest import RunManifest, attach_run_log
+from recon import __version__
 
 
 # Stages this phase actually executes (feedback and report land in later phases).
 _PHASE_1_STAGES = ["sweep", "enum", "nuclei", "nessus", "smb"]
+
+_BANNER = r"""
+        _
+  _ __ | |_      _ __ ___  ___ ___  _ __
+ | '_ \| __|____| '__/ _ \/ __/ _ \| '_ \
+ | |_) | ||_____| | |  __/ (_| (_) | | | |
+ | .__/ \__|    |_|  \___|\___\___/|_| |_|
+ |_|
+                pentest recon automation
+                       v{version}
+"""
+
+
+def _print_banner(stream=None):
+    """Print the banner to `stream` (default stderr) when it's a TTY.
+
+    No-op for pipes, redirects, CI, and pytest's capsys — so test/script output
+    stays pristine. Injectable for tests.
+    """
+    stream = stream if stream is not None else sys.stderr
+    if not stream.isatty():
+        return
+    stream.write(_BANNER.format(version=__version__))
+    stream.flush()
 
 # Map stage → callable main(argv) -> int. Subparser dispatch in Task 10 reuses this.
 # Lambdas dereference the module attribute at call time so monkeypatching works in tests.
@@ -149,6 +174,7 @@ def main(argv=None):
         stage = argv[0]
         return _STAGE_MAIN[stage](argv[1:])
     args = build_arg_parser().parse_args(argv)
+    _print_banner()
 
     if args.list_modules:
         _print_module_table()

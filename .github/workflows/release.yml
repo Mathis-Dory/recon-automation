@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.2.0). Must already exist as a git tag.'
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            git checkout "${{ github.event.inputs.tag }}"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install runtime + build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests openpyxl pytest pyinstaller
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      - name: Build single-file binary with PyInstaller
+        run: |
+          pyinstaller --onefile \
+            --name pt-recon \
+            --hidden-import recon.registry_bootstrap \
+            --collect-submodules recon \
+            bin/pt-recon
+          ./dist/pt-recon --list-modules
+
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@v3
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          body_path: ${{ steps.cliff.outputs.changelog }}
+          files: dist/pt-recon
+          generate_release_notes: false
+          fail_on_unmatched_files: true
