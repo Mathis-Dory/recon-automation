@@ -53,21 +53,25 @@ jobs:
             bin/pt-recon
           ./dist/pt-recon --list-modules
 
-      - name: Generate changelog with git-cliff
-        uses: orhun/git-cliff-action@v3
-        id: cliff
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        env:
-          OUTPUT: CHANGELOG.md
+      - name: Install git-cliff
+        run: |
+          set -euo pipefail
+          GC_VERSION=2.7.0
+          TARBALL="git-cliff-${GC_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL "https://github.com/orhun/git-cliff/releases/download/v${GC_VERSION}/${TARBALL}" -o /tmp/git-cliff.tar.gz
+          tar -xzf /tmp/git-cliff.tar.gz -C /tmp
+          sudo install -m 755 "/tmp/git-cliff-${GC_VERSION}/git-cliff" /usr/local/bin/git-cliff
+          git-cliff --version
+
+      - name: Generate changelog
+        run: git-cliff --config cliff.toml --latest --strip header --output CHANGELOG.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           name: ${{ steps.tag.outputs.name }}
-          body_path: ${{ steps.cliff.outputs.changelog }}
+          body_path: CHANGELOG.md
           files: dist/pt-recon
           generate_release_notes: false
           fail_on_unmatched_files: true
