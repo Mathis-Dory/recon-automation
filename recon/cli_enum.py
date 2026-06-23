@@ -4,57 +4,96 @@ Pipeline:
   1. Resolve targets from -r / -t / -iL.
   2. ``masscan`` at the requested rate to find open ports.
   3. ``nmap -sV`` to grab service/version banners for those open ports.
-  4. Per-protocol probes (FTP anon, SSH/Telnet banner, HTTP title, SMB null/guest).
+  4. Per-protocol probes routed through PROBE_TABLE: ftp/ssh/web/smb (built-in)
+     plus db/mail/tls-cert/web-deep/ldap/rdp/nfs/winrm/smb-depth (phase 3).
   5. Write an Excel workbook (one row per open ip:port) to ``--output``.
 
 If masscan finds zero open ports the workbook is still written (empty) so the
 orchestrator can chain reliably. Probes run in parallel via a thread pool sized
-by ``--concurrency``; per-host SMB is pre-deduplicated so a single SMB call
-covers both ports 139 and 445. Per-probe errors are recorded per row rather
-than aborting the run; ``KeyboardInterrupt`` cancels in-flight probes cleanly.
+by ``--concurrency``. Multiple probes can target the same (ip, port); their
+``finding`` values are concatenated with " | ". Per-host probes (probe-smb and
+the nxc-depth probes) are deduplicated by IP. Per-probe errors are recorded
+per row; ``KeyboardInterrupt`` cancels in-flight probes cleanly.
 """
 
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 from recon import common, enum_core, probes, scan
 
 SMB_PORTS = {139, 445}
 
 
-def _build_probe_jobs(open_ports, web_ports, fns, disabled):
-    """Pre-dispatch planner: return a list of (key, field, callable) jobs.
+@dataclass(frozen=True)
+class ProbeSpec:
+    """How a probe attaches to the dispatch loop."""
 
-    Each `(ip, port)` produces at most one job. SMB is deduplicated per IP
-    (only the first SMB port encountered enqueues a job).
-    """
+    name: str  # registry name (e.g. "probe-ftp")
+    ports: Optional[set]  # explicit port set, or None for "web_ports"
+    field: str  # "finding" or "http_title"
+    fn_key: str  # key into the probe_fns dict
+    per_host: bool = False  # dedupe by IP (first matching port wins)
+    append: bool = False  # join with " | " instead of overwriting
+
+    def matches_port(self, port, web_ports):
+        if self.ports is None:
+            return port in web_ports
+        return port in self.ports
+
+
+# Probe dispatch table. Ports=None means "use the web_ports set passed in".
+# `fn_key` is looked up in the `probe_fns` dict in dispatch_probes.
+PROBE_TABLE = (
+    ProbeSpec("probe-ftp", {21}, "finding", "ftp"),
+    ProbeSpec("probe-ssh", {22, 23}, "finding", "banner"),
+    ProbeSpec("probe-web-basic", None, "http_title", "web"),
+    ProbeSpec("probe-smb", SMB_PORTS, "finding", "smb", per_host=True),
+)
+
+
+def _build_probe_jobs(open_ports, web_ports, fns, disabled, table):
+    """Pre-dispatch planner: return a list of (key, field, append, callable) jobs."""
     jobs = []
-    smb_seen = set()
+    per_host_seen = {}  # probe_name -> set of IPs already enqueued
     for ip, port in open_ports:
-        if port == 21 and "probe-ftp" not in disabled:
-            jobs.append(((ip, port), "finding", lambda ip=ip, port=port: fns["ftp"](ip, port)))
-        elif port in (22, 23) and "probe-ssh" not in disabled:
-            jobs.append(((ip, port), "finding", lambda ip=ip, port=port: fns["banner"](ip, port)))
-        elif port in web_ports and "probe-web-basic" not in disabled:
-            jobs.append(((ip, port), "http_title", lambda ip=ip, port=port: fns["web"](ip, port)))
-        elif port in SMB_PORTS and ip not in smb_seen and "probe-smb" not in disabled:
-            smb_seen.add(ip)
-            jobs.append(((ip, port), "finding", lambda ip=ip: fns["smb"](ip)))
+        for spec in table:
+            if spec.name in disabled or spec.fn_key not in fns:
+                continue
+            if not spec.matches_port(port, web_ports):
+                continue
+            if spec.per_host:
+                seen = per_host_seen.setdefault(spec.name, set())
+                if ip in seen:
+                    continue
+                seen.add(ip)
+                jobs.append(((ip, port), spec.field, spec.append,
+                             _bind(spec.fn_key, fns, ip, None)))
+            else:
+                jobs.append(((ip, port), spec.field, spec.append,
+                             _bind(spec.fn_key, fns, ip, port)))
     return jobs
 
 
-def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None, concurrency=32):
-    """Route each open port to its probe; return per-(ip,port) results.
+def _bind(fn_key, fns, ip, port) -> Callable:
+    """Build a zero-arg thunk that calls fns[fn_key](ip) or fns[fn_key](ip, port)."""
+    if port is None:
+        return lambda: fns[fn_key](ip)
+    return lambda: fns[fn_key](ip, port)
 
-    `disabled_probes`, when given, is an iterable of registry probe names
-    (`probe-ftp`, `probe-ssh`, `probe-web-basic`, `probe-smb`) that should
-    be silently skipped — the corresponding row stays at the default empty
-    finding/http_title.
 
-    `concurrency` controls the thread pool size for probe execution. Probes
-    are I/O-bound, so a value of 32 is a reasonable default; values <= 1
-    fall back to sequential execution (useful for debugging).
+def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None, concurrency=32,
+                    table=None):
+    """Route each open port to its probe(s); return per-(ip,port) results.
+
+    Multiple probes may target the same (ip, port). Probes with `append=True`
+    concatenate to the row's `finding` with " | "; others overwrite.
+
+    `disabled_probes`, when given, is an iterable of registry probe names to
+    silently skip. `concurrency` sizes the thread pool (default 32; >=1).
+    `table` is the PROBE_TABLE to consult — defaults to the module-level one.
     """
     fns = probe_fns or {
         "ftp": probes.probe_ftp_anon,
@@ -63,27 +102,32 @@ def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
         "smb": probes.probe_smb,
     }
     disabled = set(disabled_probes or [])
+    table = table if table is not None else PROBE_TABLE
     results = {key: {"http_title": "", "finding": ""} for key in open_ports}
-    jobs = _build_probe_jobs(open_ports, web_ports, fns, disabled)
+    jobs = _build_probe_jobs(open_ports, web_ports, fns, disabled, table)
     if not jobs:
         return results
 
     max_workers = max(1, min(concurrency, len(jobs)))
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = {ex.submit(call): (key, field) for key, field, call in jobs}
+        futures = {ex.submit(call): (key, field, append) for key, field, append, call in jobs}
         try:
             for fut in as_completed(futures):
-                key, field = futures[fut]
+                key, field, append = futures[fut]
                 try:
                     value = fut.result()
                 except Exception as exc:  # never abort the whole run
                     results[key]["finding"] = f"probe error: {exc}"
                     continue
-                if value:
+                if not value:
+                    continue
+                if append and results[key][field]:
+                    results[key][field] = results[key][field] + " | " + value
+                else:
                     results[key][field] = value
         except KeyboardInterrupt:
             ex.shutdown(wait=False, cancel_futures=True)
-            for key, _ in futures.values():
+            for key, _, _ in futures.values():
                 if not results[key]["finding"] and not results[key]["http_title"]:
                     results[key]["finding"] = "INTERRUPTED"
             raise
