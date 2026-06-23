@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 
 import pytest
@@ -22,7 +21,8 @@ def stub_tools_present(monkeypatch):
     original_which = shutil.which
     stubbed = {"nmap", "masscan", "nxc"}
     monkeypatch.setattr(
-        shutil, "which",
+        shutil,
+        "which",
         lambda name: f"/usr/bin/{name}" if name in stubbed else original_which(name),
     )
 
@@ -57,8 +57,7 @@ def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch, stub_too
     """Default invocation: every stage runs (or auto-skips with a reason)."""
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
 
     calls = []
 
@@ -96,8 +95,7 @@ def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch, stub_too
 def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_tools_present):
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
     captured = {}
 
     def fake_sweep(argv):
@@ -118,8 +116,7 @@ def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_
     monkeypatch.setattr("recon.cli_nessus.main", lambda a: 0)
     monkeypatch.setattr("recon.cli_smb.main", lambda a: 0)
 
-    cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30",
-                    "--no-probe-ftp", "--no-probe-smb"])
+    cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--no-probe-ftp", "--no-probe-smb"])
 
     assert "--disable-probes" in captured["enum_argv"]
     csv_idx = captured["enum_argv"].index("--disable-probes")
@@ -130,30 +127,31 @@ def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_
 def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypatch):
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
     # Force nessus skip by clobbering config_loader path to a non-existent file.
-    monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH",
-                        str(tmp_path / "nope.ini"))
+    monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH", str(tmp_path / "nope.ini"))
     # Force smb-mass skip by removing nxc from PATH.
     import shutil
+
     original_which = shutil.which
     monkeypatch.setattr(
-        shutil, "which",
+        shutil,
+        "which",
         lambda name: None if name == "nxc" else original_which(name),
     )
 
-    monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n"), 0)[1])
-    monkeypatch.setattr("recon.cli_enum.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").close() or 0))
+    monkeypatch.setattr(
+        "recon.cli_sweep.main",
+        lambda a: (open(a[a.index("-o") + 1], "w").write("10.0.0.1\n"), 0)[1],
+    )
+    monkeypatch.setattr(
+        "recon.cli_enum.main", lambda a: open(a[a.index("-o") + 1], "w").close() or 0
+    )
     monkeypatch.setattr("recon.cli_nuclei.main", lambda a: 0)
     nessus_called = []
     smb_called = []
-    monkeypatch.setattr("recon.cli_nessus.main",
-                        lambda a: nessus_called.append(a) or 0)
-    monkeypatch.setattr("recon.cli_smb.main",
-                        lambda a: smb_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_nessus.main", lambda a: nessus_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_smb.main", lambda a: smb_called.append(a) or 0)
 
     rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])
 
@@ -171,8 +169,9 @@ def test_orchestrator_auto_skips_module_with_missing_prereqs(tmp_path, monkeypat
 
 
 def test_orchestrator_target_parse_error_exits_2(tmp_path, monkeypatch):
-    monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name, root=None: str(tmp_path / "eng"))
+    monkeypatch.setattr(
+        "recon.common.engagement_dir", lambda name, root=None: str(tmp_path / "eng")
+    )
 
     def boom(*_args):
         raise ValueError("no targets")
@@ -185,33 +184,33 @@ def test_orchestrator_target_parse_error_exits_2(tmp_path, monkeypatch):
 def test_orchestrator_exits_2_when_targets_out_of_scope(tmp_path, monkeypatch):
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.5", "192.168.1.10"])
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.5", "192.168.1.10"])
     scope = tmp_path / "scope.txt"
     scope.write_text("10.0.0.0/24\n")  # 192.168.1.10 is OUT of scope
     sweep_called = []
     monkeypatch.setattr("recon.cli_sweep.main", lambda a: sweep_called.append(a) or 0)
 
-    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
-                         "--scope-file", str(scope)])
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24", "--scope-file", str(scope)])
 
     assert rc == 2
     assert sweep_called == [], "no stage should run when targets are out of scope"
 
 
 def test_orchestrator_scope_file_missing_exits_2(tmp_path, monkeypatch):
-    monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name, root=None: str(tmp_path / "eng"))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.5"])
-    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
-                         "--scope-file", str(tmp_path / "nope.txt")])
+    monkeypatch.setattr(
+        "recon.common.engagement_dir", lambda name, root=None: str(tmp_path / "eng")
+    )
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.5"])
+    rc = cli_recon.main(
+        ["-n", "eng", "-r", "10.0.0.0/24", "--scope-file", str(tmp_path / "nope.txt")]
+    )
     assert rc == 2
 
 
 def test_resume_skips_completed_sweep_and_enum(tmp_path, monkeypatch, stub_tools_present):
     """With --resume and a prior run.json showing sweep/enum ok, only nuclei runs."""
     import json
+
     outdir = tmp_path / "eng"
     outdir.mkdir()
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
@@ -220,19 +219,35 @@ def test_resume_skips_completed_sweep_and_enum(tmp_path, monkeypatch, stub_tools
     # Seed prior run.json + artifacts on disk.
     (outdir / "live-hosts.txt").write_text("10.0.0.1\n")
     (outdir / "enum.xlsx").write_text("placeholder")
-    (outdir / "run.json").write_text(json.dumps({
-        "engagement": "eng",
-        "started_at": "2026-06-23T00:00:00Z",
-        "finished_at": None,
-        "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
-        "stages": [
-            {"name": "sweep", "status": "ok", "elapsed_s": 1.0,
-             "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0},
-            {"name": "enum", "status": "ok", "elapsed_s": 2.5,
-             "modules_run": ["masscan"], "modules_skipped": [], "exit_code": 0},
-        ],
-        "exit_code": None,
-    }))
+    (outdir / "run.json").write_text(
+        json.dumps(
+            {
+                "engagement": "eng",
+                "started_at": "2026-06-23T00:00:00Z",
+                "finished_at": None,
+                "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
+                "stages": [
+                    {
+                        "name": "sweep",
+                        "status": "ok",
+                        "elapsed_s": 1.0,
+                        "modules_run": ["sweep"],
+                        "modules_skipped": [],
+                        "exit_code": 0,
+                    },
+                    {
+                        "name": "enum",
+                        "status": "ok",
+                        "elapsed_s": 2.5,
+                        "modules_run": ["masscan"],
+                        "modules_skipped": [],
+                        "exit_code": 0,
+                    },
+                ],
+                "exit_code": None,
+            }
+        )
+    )
 
     sweep_called = []
     enum_called = []
@@ -259,23 +274,34 @@ def test_resume_skips_completed_sweep_and_enum(tmp_path, monkeypatch, stub_tools
 def test_resume_reruns_stage_when_artifact_missing(tmp_path, monkeypatch, stub_tools_present):
     """status=ok in manifest but artifact deleted from disk → stage re-runs."""
     import json
+
     outdir = tmp_path / "eng"
     outdir.mkdir()
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
 
     # Manifest says sweep was ok, but live-hosts.txt is missing.
-    (outdir / "run.json").write_text(json.dumps({
-        "engagement": "eng",
-        "started_at": "2026-06-23T00:00:00Z",
-        "finished_at": None,
-        "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
-        "stages": [
-            {"name": "sweep", "status": "ok", "elapsed_s": 1.0,
-             "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0},
-        ],
-        "exit_code": None,
-    }))
+    (outdir / "run.json").write_text(
+        json.dumps(
+            {
+                "engagement": "eng",
+                "started_at": "2026-06-23T00:00:00Z",
+                "finished_at": None,
+                "targets": {"count": 1, "source": "-r 10.0.0.0/30"},
+                "stages": [
+                    {
+                        "name": "sweep",
+                        "status": "ok",
+                        "elapsed_s": 1.0,
+                        "modules_run": ["sweep"],
+                        "modules_skipped": [],
+                        "exit_code": 0,
+                    },
+                ],
+                "exit_code": None,
+            }
+        )
+    )
 
     def fake_sweep(argv):
         idx = argv.index("-o")
@@ -298,23 +324,36 @@ def test_resume_reruns_stage_when_artifact_missing(tmp_path, monkeypatch, stub_t
 def test_no_resume_flag_overwrites_prior_run_json(tmp_path, monkeypatch, stub_tools_present):
     """Without --resume, prior run.json is overwritten with a fresh stages list."""
     import json
+
     outdir = tmp_path / "eng"
     outdir.mkdir()
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
-    (outdir / "run.json").write_text(json.dumps({
-        "engagement": "eng",
-        "stages": [{"name": "sweep", "status": "ok", "elapsed_s": 1.0,
-                    "modules_run": ["sweep"], "modules_skipped": [], "exit_code": 0}],
-        "exit_code": None,
-    }))
+    (outdir / "run.json").write_text(
+        json.dumps(
+            {
+                "engagement": "eng",
+                "stages": [
+                    {
+                        "name": "sweep",
+                        "status": "ok",
+                        "elapsed_s": 1.0,
+                        "modules_run": ["sweep"],
+                        "modules_skipped": [],
+                        "exit_code": 0,
+                    }
+                ],
+                "exit_code": None,
+            }
+        )
+    )
     (outdir / "live-hosts.txt").write_text("10.0.0.1\n")
 
     sweep_called = []
-    monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: sweep_called.append(a) or 0)
-    monkeypatch.setattr("recon.cli_enum.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").close() or 0))
+    monkeypatch.setattr("recon.cli_sweep.main", lambda a: sweep_called.append(a) or 0)
+    monkeypatch.setattr(
+        "recon.cli_enum.main", lambda a: open(a[a.index("-o") + 1], "w").close() or 0
+    )
     monkeypatch.setattr("recon.cli_nuclei.main", lambda a: 0)
     monkeypatch.setattr("recon.cli_nessus.main", lambda a: 0)
     monkeypatch.setattr("recon.cli_smb.main", lambda a: 0)
@@ -337,8 +376,7 @@ def test_orchestrator_in_scope_targets_proceed(tmp_path, monkeypatch, stub_tools
         return 0
 
     monkeypatch.setattr("recon.cli_sweep.main", fake_sweep)
-    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24",
-                         "--scope-file", str(scope)])
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/24", "--scope-file", str(scope)])
     assert rc == 0  # sweep ran and short-circuited cleanly
 
 
@@ -357,13 +395,14 @@ def test_list_modules_prints_table_and_exits_zero(capsys):
 
 
 def test_dry_run_prints_plan_and_exits_zero(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name, root=None: str(tmp_path / "eng"))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr(
+        "recon.common.engagement_dir", lambda name, root=None: str(tmp_path / "eng")
+    )
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
     # nothing should actually run
-    monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: pytest.fail("sweep should not run in dry-run"))
+    monkeypatch.setattr(
+        "recon.cli_sweep.main", lambda a: pytest.fail("sweep should not run in dry-run")
+    )
     rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--dry-run"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -374,16 +413,17 @@ def test_dry_run_prints_plan_and_exits_zero(tmp_path, monkeypatch, capsys):
 
 
 def test_dry_run_shows_auto_skip_reasons(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name, root=None: str(tmp_path / "eng"))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
-    monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH",
-                        str(tmp_path / "nope.ini"))
+    monkeypatch.setattr(
+        "recon.common.engagement_dir", lambda name, root=None: str(tmp_path / "eng")
+    )
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.DEFAULT_CONFIG_PATH", str(tmp_path / "nope.ini"))
     import shutil
+
     original_which = shutil.which
     monkeypatch.setattr(
-        shutil, "which",
+        shutil,
+        "which",
         lambda name: None if name == "nxc" else original_which(name),
     )
     rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30", "--dry-run"])
@@ -427,12 +467,13 @@ def test_subparser_propagates_exit_code(monkeypatch):
     assert rc == 7
 
 
-def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkeypatch, stub_tools_present):
+def test_orchestrator_propagates_sweep_failure_with_empty_hosts(
+    tmp_path, monkeypatch, stub_tools_present
+):
     """If sweep exits non-zero but writes an empty hosts file, overall exit must be 1 (not 0)."""
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name, root=None: str(outdir))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
 
     enum_called = []
     nuclei_called = []
@@ -460,14 +501,17 @@ def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkey
     assert smb_called == [], "smb should not be invoked after sweep short-circuit"
 
 
-def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path, stub_tools_present):
+def test_unknown_subcommand_falls_through_to_orchestrator(
+    monkeypatch, tmp_path, stub_tools_present
+):
     """`pt-recon -n foo -r ...` (no subcommand) still works as before."""
-    monkeypatch.setattr("recon.common.engagement_dir",
-                        lambda name, root=None: str(tmp_path / "eng"))
-    monkeypatch.setattr("recon.common.parse_targets",
-                        lambda r, t, i: ["10.0.0.1"])
-    monkeypatch.setattr("recon.cli_sweep.main",
-                        lambda a: (open(a[a.index("-o") + 1], "w").write("") or 0))
+    monkeypatch.setattr(
+        "recon.common.engagement_dir", lambda name, root=None: str(tmp_path / "eng")
+    )
+    monkeypatch.setattr("recon.common.parse_targets", lambda r, t, i: ["10.0.0.1"])
+    monkeypatch.setattr(
+        "recon.cli_sweep.main", lambda a: open(a[a.index("-o") + 1], "w").write("") or 0
+    )
     rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])
     assert rc == 0  # sweep with empty result short-circuits
 
@@ -492,10 +536,8 @@ class _FakeStream:
 
 def test_meta_subcommands_dispatch(monkeypatch):
     status_calls, diff_calls = [], []
-    monkeypatch.setattr("recon.cli_status.main",
-                        lambda argv: status_calls.append(list(argv)) or 0)
-    monkeypatch.setattr("recon.cli_diff.main",
-                        lambda argv: diff_calls.append(list(argv)) or 0)
+    monkeypatch.setattr("recon.cli_status.main", lambda argv: status_calls.append(list(argv)) or 0)
+    monkeypatch.setattr("recon.cli_diff.main", lambda argv: diff_calls.append(list(argv)) or 0)
     assert cli_recon.main(["status", "acme"]) == 0
     assert status_calls == [["acme"]]
     assert cli_recon.main(["diff", "a", "b"]) == 0

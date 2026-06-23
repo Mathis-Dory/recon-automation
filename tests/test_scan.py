@@ -2,11 +2,7 @@ from recon import scan
 
 
 def test_parse_masscan_list():
-    text = (
-        "#masscan\n"
-        "open tcp 80 10.0.0.1 1700000000\n"
-        "open tcp 445 10.0.0.2 1700000000\n"
-    )
+    text = "#masscan\nopen tcp 80 10.0.0.1 1700000000\nopen tcp 445 10.0.0.2 1700000000\n"
     assert scan.parse_masscan_list(text) == {("10.0.0.1", 80), ("10.0.0.2", 445)}
 
 
@@ -33,16 +29,15 @@ def test_run_masscan_raises_on_failure():
         stdout = ""
         stderr = "FAIL: permission denied (raw sockets require root)"
         returncode = 1
+
     import pytest
+
     with pytest.raises(RuntimeError):
         scan.run_masscan(["10.0.0.1"], [80], runner=lambda c, **k: Result())
 
 
 def test_parse_nmap_grepable():
-    text = (
-        "# Nmap\n"
-        "Host: 10.0.0.1 ()\tPorts: 80/open/tcp//http//Apache httpd 2.4.52/\n"
-    )
+    text = "# Nmap\nHost: 10.0.0.1 ()\tPorts: 80/open/tcp//http//Apache httpd 2.4.52/\n"
     parsed = scan.parse_nmap_grepable(text)
     assert parsed[("10.0.0.1", 80)]["service"] == "http"
     assert parsed[("10.0.0.1", 80)]["state"] == "open"

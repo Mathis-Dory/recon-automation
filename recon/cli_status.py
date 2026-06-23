@@ -1,4 +1,5 @@
 """pt-recon status: summarize a prior engagement run from its run.json."""
+
 import argparse
 import json
 import os
@@ -13,8 +14,11 @@ def build_arg_parser():
         description="Summarize a prior engagement's run.json and artifacts.",
     )
     parser.add_argument("name", help="engagement name")
-    parser.add_argument("--outdir", dest="outdir",
-                        help="engagement output root (overrides $PT_RECON_OUTPUT and default)")
+    parser.add_argument(
+        "--outdir",
+        dest="outdir",
+        help="engagement output root (overrides $PT_RECON_OUTPUT and default)",
+    )
     return parser
 
 
@@ -78,14 +82,16 @@ def main(argv=None):
 
     rows = [("stage", "status", "elapsed", "exit", "run", "skipped")]
     for s in data.get("stages", []):
-        rows.append((
-            s.get("name", "?"),
-            s.get("status", "?"),
-            f"{s.get('elapsed_s', 0):.1f}s",
-            str(s.get("exit_code")),
-            ",".join(s.get("modules_run", [])) or "—",
-            str(len(s.get("modules_skipped", []))),
-        ))
+        rows.append(
+            (
+                s.get("name", "?"),
+                s.get("status", "?"),
+                f"{s.get('elapsed_s', 0):.1f}s",
+                str(s.get("exit_code")),
+                ",".join(s.get("modules_run", [])) or "—",
+                str(len(s.get("modules_skipped", []))),
+            )
+        )
     print(_format_table(rows))
     print()
 

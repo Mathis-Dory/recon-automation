@@ -8,9 +8,10 @@ returns once it reaches a terminal state (completed/canceled/aborted).
 
 The scan UI URL is logged on creation so it can be opened from a terminal.
 """
+
+import argparse
 import sys
 import time
-import argparse
 
 from recon import common
 from recon.nessus import NessusClient
@@ -37,22 +38,30 @@ def build_arg_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-n", "--name", required=True,
-                        help="scan name as it will appear in the Nessus UI")
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("--template",
-                        help="Nessus template name (default: from config, else 'Basic Network Scan')")
-    parser.add_argument("--folder", type=int, default=None,
-                        help="numeric Nessus folder id to place the scan in")
-    parser.add_argument("--wait", action="store_true",
-                        help="poll scan status every 15s until it reaches a terminal state")
-    parser.add_argument("--no-launch", action="store_true",
-                        help="create the scan but do not start it")
+    parser.add_argument(
+        "-n", "--name", required=True, help="scan name as it will appear in the Nessus UI"
+    )
+    parser.add_argument(
+        "-r", "--range", dest="range", help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)"
+    )
+    parser.add_argument(
+        "-t", "--targets", dest="targets", help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6"
+    )
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file with one target per line")
+    parser.add_argument(
+        "--template", help="Nessus template name (default: from config, else 'Basic Network Scan')"
+    )
+    parser.add_argument(
+        "--folder", type=int, default=None, help="numeric Nessus folder id to place the scan in"
+    )
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="poll scan status every 15s until it reaches a terminal state",
+    )
+    parser.add_argument(
+        "--no-launch", action="store_true", help="create the scan but do not start it"
+    )
     return parser
 
 

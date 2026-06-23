@@ -1,10 +1,10 @@
 """Run manifest (run.json) writer and orchestrator-log tee."""
+
 import json
 import logging
 import os
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 
 def _iso(dt: datetime) -> str:
@@ -12,7 +12,7 @@ def _iso(dt: datetime) -> str:
 
 
 def _default_clock() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # Artifact each stage writes; used by --resume to confirm completion on disk.
@@ -28,13 +28,19 @@ STAGE_ARTIFACTS = {
 class RunManifest:
     """Incrementally-written run.json describing one orchestrator invocation."""
 
-    def __init__(self, engagement: str, outdir: str,
-                 targets_count: int, targets_source: str,
-                 *, clock: Optional[Callable[[], datetime]] = None) -> None:
+    def __init__(
+        self,
+        engagement: str,
+        outdir: str,
+        targets_count: int,
+        targets_source: str,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._clock = clock or _default_clock
         self.outdir = outdir
         self.path = os.path.join(outdir, "run.json")
-        self._data: Dict = {
+        self._data: dict = {
             "engagement": engagement,
             "started_at": _iso(self._clock()),
             "finished_at": None,
@@ -45,9 +51,15 @@ class RunManifest:
         self.write()
 
     @classmethod
-    def from_existing(cls, engagement: str, outdir: str,
-                      targets_count: int, targets_source: str,
-                      *, clock: Optional[Callable[[], datetime]] = None) -> "RunManifest":
+    def from_existing(
+        cls,
+        engagement: str,
+        outdir: str,
+        targets_count: int,
+        targets_source: str,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> "RunManifest":
         """Load any prior run.json under `outdir`, preserving its stages list.
 
         If no run.json exists, behaves like the normal constructor — a fresh
@@ -88,10 +100,15 @@ class RunManifest:
             return True
         return os.path.exists(os.path.join(self.outdir, artifact))
 
-    def add_stage(self, name: str, status: str, elapsed_s: float,
-                  modules_run: List[str],
-                  modules_skipped: List[Dict[str, str]],
-                  exit_code: Optional[int]) -> None:
+    def add_stage(
+        self,
+        name: str,
+        status: str,
+        elapsed_s: float,
+        modules_run: list[str],
+        modules_skipped: list[dict[str, str]],
+        exit_code: int | None,
+    ) -> None:
         record = {
             "name": name,
             "status": status,

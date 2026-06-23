@@ -1,4 +1,4 @@
-from recon import enum_core, common
+from recon import common, enum_core
 
 
 def test_is_web_port():

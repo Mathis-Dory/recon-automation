@@ -1,4 +1,5 @@
 """nuclei target building and bootstrap."""
+
 import os
 import shutil
 import subprocess
@@ -44,12 +45,19 @@ def ensure_nuclei(which=shutil.which, runner=subprocess.run):
     return gobin
 
 
-def build_nuclei_cmd(targets_file, out_path, severity="medium,high,critical", extra=None, nuclei_bin="nuclei"):
+def build_nuclei_cmd(
+    targets_file, out_path, severity="medium,high,critical", extra=None, nuclei_bin="nuclei"
+):
     """Construct the nuclei command line."""
     cmd = [
-        nuclei_bin, "-l", targets_file,
-        "-severity", severity,
-        "-jsonl", "-o", out_path,
+        nuclei_bin,
+        "-l",
+        targets_file,
+        "-severity",
+        severity,
+        "-jsonl",
+        "-o",
+        out_path,
     ]
     if extra:
         cmd.extend(extra)

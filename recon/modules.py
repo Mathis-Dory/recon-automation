@@ -1,13 +1,13 @@
 """Module registry primitives: dataclass, requirement types, and constants."""
+
 from __future__ import annotations
 
 import argparse  # noqa: F401  (used in type hint on register_argparse_flags)
-import shutil
 import configparser
-from pathlib import Path
+import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Union
-
+from pathlib import Path
 
 STAGES = ["sweep", "enum", "feedback", "nuclei", "nessus", "smb", "report"]
 
@@ -25,10 +25,10 @@ class ConfigKey:
 
 @dataclass(frozen=True)
 class Soft:
-    inner: Union["Tool", "ConfigKey"]
+    inner: Tool | ConfigKey
 
 
-Requirement = Union[Tool, ConfigKey, Soft]
+Requirement = Tool | ConfigKey | Soft
 
 
 @dataclass
@@ -39,10 +39,11 @@ class Ok:
 @dataclass
 class Skip:
     """Requirement check failed — the module should be skipped."""
+
     reason: str
 
 
-def _check_one(req: Requirement, config_loader: Callable[[], dict]) -> Optional[Skip]:
+def _check_one(req: Requirement, config_loader: Callable[[], dict]) -> Skip | None:
     if isinstance(req, Soft):
         return None  # soft requirements never produce Skip
     if isinstance(req, Tool):
@@ -60,6 +61,7 @@ def _check_one(req: Requirement, config_loader: Callable[[], dict]) -> Optional[
 
 def _default_config_loader() -> dict:
     from recon import common  # local import to avoid cycle at module load
+
     path = Path(common.DEFAULT_CONFIG_PATH)
     if not path.exists():
         return {}
@@ -68,8 +70,7 @@ def _default_config_loader() -> dict:
     return {s: dict(cp.items(s)) for s in cp.sections()}
 
 
-def check_requirements(mod: Module,
-                       config_loader: Optional[Callable[[], dict]] = None):
+def check_requirements(mod: Module, config_loader: Callable[[], dict] | None = None):
     loader = config_loader or _default_config_loader
     for req in mod.requires:
         result = _check_one(req, loader)
@@ -83,10 +84,10 @@ class Module:
     name: str
     stage: str
     help: str
-    requires: List[Requirement] = field(default_factory=list)
+    requires: list[Requirement] = field(default_factory=list)
     default_on: bool = True
     togglable: bool = True
-    run: Optional[Callable] = None
+    run: Callable | None = None
 
 
 class Registry:
@@ -108,10 +109,10 @@ class Registry:
     def has(self, name: str) -> bool:
         return name in self._modules
 
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         return list(self._modules)
 
-    def iter(self, stage: Optional[str] = None):
+    def iter(self, stage: str | None = None):
         for m in self._modules.values():
             if stage is None or m.stage == stage:
                 yield m
@@ -120,11 +121,18 @@ class Registry:
 _DEFAULT_REGISTRY = Registry()
 
 
-def module(*, name: str, stage: str, help: str,
-           requires: Optional[List[Requirement]] = None,
-           default_on: bool = True, togglable: bool = True,
-           registry: Optional[Registry] = None):
+def module(
+    *,
+    name: str,
+    stage: str,
+    help: str,
+    requires: list[Requirement] | None = None,
+    default_on: bool = True,
+    togglable: bool = True,
+    registry: Registry | None = None,
+):
     """Decorator: register the wrapped function as a recon module."""
+
     def decorator(fn: Callable) -> Callable:
         mod = Module(
             name=name,
@@ -138,6 +146,7 @@ def module(*, name: str, stage: str, help: str,
         target = registry or _DEFAULT_REGISTRY
         target.register(mod)
         return fn
+
     return decorator
 
 

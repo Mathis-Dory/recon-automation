@@ -2,8 +2,8 @@ import json
 import os
 from datetime import datetime
 
-from recon.manifest import RunManifest, attach_run_log
 from recon import common
+from recon.manifest import RunManifest, attach_run_log
 
 
 def test_manifest_write_creates_json(tmp_path):
@@ -14,8 +14,7 @@ def test_manifest_write_creates_json(tmp_path):
         targets_source="-r 10.0.0.0/30",
         clock=lambda: datetime(2026, 6, 22, 14, 0, 0),
     )
-    m.add_stage("sweep", "ok", 1.5,
-                modules_run=["sweep"], modules_skipped=[], exit_code=0)
+    m.add_stage("sweep", "ok", 1.5, modules_run=["sweep"], modules_skipped=[], exit_code=0)
     m.set_exit_code(0)
     data = json.loads((tmp_path / "run.json").read_text())
     assert data["engagement"] == "acme"
@@ -30,26 +29,24 @@ def test_manifest_write_creates_json(tmp_path):
 
 
 def test_manifest_records_skipped_modules(tmp_path):
-    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
-                    clock=lambda: datetime(2026, 6, 22))
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1", clock=lambda: datetime(2026, 6, 22))
     m.add_stage(
-        "nessus", "skipped", 0.0,
+        "nessus",
+        "skipped",
+        0.0,
         modules_run=[],
-        modules_skipped=[{"name": "nessus",
-                          "reason": "config nessus.access_key missing or empty"}],
+        modules_skipped=[{"name": "nessus", "reason": "config nessus.access_key missing or empty"}],
         exit_code=None,
     )
     m.set_exit_code(0)
     data = json.loads((tmp_path / "run.json").read_text())
     skipped = data["stages"][0]["modules_skipped"]
-    assert skipped == [{"name": "nessus",
-                        "reason": "config nessus.access_key missing or empty"}]
+    assert skipped == [{"name": "nessus", "reason": "config nessus.access_key missing or empty"}]
 
 
 def test_manifest_writes_placeholder_on_init(tmp_path):
     """RunManifest.__init__ should immediately write a placeholder run.json with stages: [] and exit_code: null."""
-    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
-                    clock=lambda: datetime(2026, 6, 22))
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1", clock=lambda: datetime(2026, 6, 22))
     assert (tmp_path / "run.json").exists()
     data = json.loads((tmp_path / "run.json").read_text())
     assert data["stages"] == []
@@ -88,8 +85,10 @@ def test_attach_run_log_formats_warning_as_warn(tmp_path):
 
 
 def test_manifest_from_existing_loads_prior_stages(tmp_path):
-    from recon.manifest import RunManifest
     from datetime import datetime
+
+    from recon.manifest import RunManifest
+
     clk = lambda: datetime(2026, 6, 23, 12, 0, 0)
     # First run: write sweep and enum as ok.
     m1 = RunManifest("acme", str(tmp_path), 5, "-r 10.0.0.0/30", clock=clk)
@@ -106,17 +105,18 @@ def test_manifest_from_existing_loads_prior_stages(tmp_path):
 
 def test_manifest_from_existing_handles_missing_file(tmp_path):
     from recon.manifest import RunManifest
+
     m = RunManifest.from_existing("acme", str(tmp_path), 1, "-t 1.1.1.1")
     assert m._data["stages"] == []
     assert os.path.exists(m.path)  # written as a placeholder
 
 
 def test_manifest_is_stage_complete_requires_status_ok_and_artifact(tmp_path):
-    import json
-    from recon.manifest import RunManifest
     from datetime import datetime
-    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
-                    clock=lambda: datetime(2026, 6, 23))
+
+    from recon.manifest import RunManifest
+
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1", clock=lambda: datetime(2026, 6, 23))
     m.add_stage("sweep", "ok", 1.0, ["sweep"], [], 0)
     assert m.is_stage_complete("sweep") is False  # artifact missing
     (tmp_path / "live-hosts.txt").write_text("10.0.0.1\n")
@@ -130,10 +130,11 @@ def test_manifest_is_stage_complete_requires_status_ok_and_artifact(tmp_path):
 
 
 def test_manifest_add_stage_replaces_prior_record_for_same_name(tmp_path):
-    from recon.manifest import RunManifest
     from datetime import datetime
-    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
-                    clock=lambda: datetime(2026, 6, 23))
+
+    from recon.manifest import RunManifest
+
+    m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1", clock=lambda: datetime(2026, 6, 23))
     m.add_stage("sweep", "error", 0.5, ["sweep"], [], 1)
     m.add_stage("sweep", "ok", 0.3, ["sweep"], [], 0)
     sweeps = [s for s in m._data["stages"] if s["name"] == "sweep"]
@@ -149,9 +150,11 @@ def test_attach_run_log_is_idempotent_for_same_path(tmp_path):
     h2 = attach_run_log(log_path, logger_prefix="pt-")
     try:
         # Only one FileHandler with this baseFilename should remain on the logger.
-        same_path = [h for h in logger.handlers
-                     if isinstance(h, type(h1))
-                     and getattr(h, "baseFilename", None) == h1.baseFilename]
+        same_path = [
+            h
+            for h in logger.handlers
+            if isinstance(h, type(h1)) and getattr(h, "baseFilename", None) == h1.baseFilename
+        ]
         assert len(same_path) == 1
     finally:
         for h in (h1, h2):

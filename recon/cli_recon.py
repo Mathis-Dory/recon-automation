@@ -4,25 +4,32 @@ Default invocation (no subcommand) runs every enabled stage in order
 (sweep → enum → nuclei → nessus → smb), with auto-skip on missing
 prerequisites per the umbrella design spec §9.1.
 """
+
+import argparse
+import logging
 import os
 import sys
 import time
-import argparse
-import logging
 
-from recon import common
-from recon import cli_sweep, cli_enum, cli_nuclei, cli_nessus, cli_smb
-from recon import cli_status, cli_diff
-from recon.modules import (
-    _DEFAULT_REGISTRY,
-    register_argparse_flags,
-    evaluate_enabled,
-    check_requirements,
-    Skip,
+from recon import (
+    __version__,
+    cli_diff,
+    cli_enum,
+    cli_nessus,
+    cli_nuclei,
+    cli_smb,
+    cli_status,
+    cli_sweep,
+    common,
 )
 from recon.manifest import RunManifest, attach_run_log
-from recon import __version__
-
+from recon.modules import (
+    _DEFAULT_REGISTRY,
+    Skip,
+    check_requirements,
+    evaluate_enabled,
+    register_argparse_flags,
+)
 
 # Stages this phase actually executes (feedback and report land in later phases).
 _PHASE_1_STAGES = ["sweep", "enum", "nuclei", "nessus", "smb"]
@@ -50,6 +57,7 @@ def _print_banner(stream=None):
         return
     stream.write(_BANNER.format(version=__version__))
     stream.flush()
+
 
 # Map stage → callable main(argv) -> int. Subparser dispatch in Task 10 reuses this.
 # Lambdas dereference the module attribute at call time so monkeypatching works in tests.
@@ -96,16 +104,34 @@ def build_arg_parser():
     parser.add_argument("-r", "--range", dest="range", help="CIDR or dashed range")
     parser.add_argument("-t", "--targets", dest="targets", help="comma-separated IPs")
     parser.add_argument("-iL", "--input-list", dest="infile", help="file of targets")
-    parser.add_argument("--outdir", dest="outdir",
-                        help="engagement output root (default: $PT_RECON_OUTPUT or ~/tools/recon/output)")
-    parser.add_argument("--scope-file", dest="scope_file",
-                        help="allow-list of CIDRs (one per line; # comments); abort if any target is outside")
-    parser.add_argument("--resume", dest="resume", action="store_true",
-                        help="skip stages already recorded as status=ok in run.json (with their artifact present)")
-    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
-                        help="print planned stages, enabled modules, and skip reasons; do not run anything")
-    parser.add_argument("--list-modules", dest="list_modules", action="store_true",
-                        help="print the registry as a table and exit")
+    parser.add_argument(
+        "--outdir",
+        dest="outdir",
+        help="engagement output root (default: $PT_RECON_OUTPUT or ~/tools/recon/output)",
+    )
+    parser.add_argument(
+        "--scope-file",
+        dest="scope_file",
+        help="allow-list of CIDRs (one per line; # comments); abort if any target is outside",
+    )
+    parser.add_argument(
+        "--resume",
+        dest="resume",
+        action="store_true",
+        help="skip stages already recorded as status=ok in run.json (with their artifact present)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="print planned stages, enabled modules, and skip reasons; do not run anything",
+    )
+    parser.add_argument(
+        "--list-modules",
+        dest="list_modules",
+        action="store_true",
+        help="print the registry as a table and exit",
+    )
     register_argparse_flags(parser, _DEFAULT_REGISTRY)
     return parser
 
@@ -127,8 +153,9 @@ def _target_args(args, hosts_file):
 def _enum_argv(args, hosts_file, enum_xlsx, enabled_modules):
     argv = _target_args(args, hosts_file) + ["-o", enum_xlsx]
     # Pass probes that were disabled by the operator so cli_enum can skip them.
-    all_probe_names = {m.name for m in _DEFAULT_REGISTRY.iter(stage="enum")
-                       if m.name.startswith("probe-")}
+    all_probe_names = {
+        m.name for m in _DEFAULT_REGISTRY.iter(stage="enum") if m.name.startswith("probe-")
+    }
     disabled = sorted(all_probe_names - enabled_modules)
     if disabled:
         argv += ["--disable-probes", ",".join(disabled)]
@@ -155,7 +182,8 @@ def _build_stage_argv(stage, args, hosts_file, enum_xlsx, outdir, enabled_module
 
 
 def _render_req(req):
-    from recon.modules import Tool, ConfigKey, Soft
+    from recon.modules import ConfigKey, Soft, Tool
+
     if isinstance(req, Tool):
         return f"tool:{req.name}"
     if isinstance(req, ConfigKey):
@@ -170,12 +198,15 @@ def _print_module_table():
     rows = [cols]
     for m in _DEFAULT_REGISTRY.iter():
         reqs = ", ".join(_render_req(r) for r in m.requires) or "—"
-        rows.append((
-            m.name, m.stage,
-            "on" if m.default_on else "off",
-            "yes" if m.togglable else "no",
-            reqs,
-        ))
+        rows.append(
+            (
+                m.name,
+                m.stage,
+                "on" if m.default_on else "off",
+                "yes" if m.togglable else "no",
+                reqs,
+            )
+        )
     widths = [max(len(r[i]) for r in rows) for i in range(len(cols))]
     fmt = "  ".join(f"{{:<{w}}}" for w in widths)
     for i, row in enumerate(rows):
@@ -199,8 +230,7 @@ def main(argv=None):
         _print_module_table()
         return 0
     if not args.name:
-        print("error: -n/--name is required (unless --list-modules is used)",
-              file=sys.stderr)
+        print("error: -n/--name is required (unless --list-modules is used)", file=sys.stderr)
         return 2
 
     log = common.get_logger("pt-recon")
@@ -231,11 +261,13 @@ def main(argv=None):
             return 2
 
     targets_source = " ".join(
-        flag for flag in (
+        flag
+        for flag in (
             f"-r {args.range}" if args.range else None,
             f"-t {args.targets}" if args.targets else None,
             f"-iL {args.infile}" if args.infile else None,
-        ) if flag
+        )
+        if flag
     )
 
     enabled_global = evaluate_enabled(args, _DEFAULT_REGISTRY)
@@ -243,8 +275,9 @@ def main(argv=None):
     if args.dry_run:
         print("planned stages:")
         for stage in _PHASE_1_STAGES:
-            stage_mods = [m for m in _DEFAULT_REGISTRY.iter(stage=stage)
-                          if m.name in enabled_global]
+            stage_mods = [
+                m for m in _DEFAULT_REGISTRY.iter(stage=stage) if m.name in enabled_global
+            ]
             if not stage_mods:
                 print(f"  {stage}: (skipped — disabled)")
                 continue
@@ -281,8 +314,9 @@ def main(argv=None):
                 log.info("=== stage: %s (resumed; already complete) ===", stage)
                 continue
 
-            stage_modules = [m for m in _DEFAULT_REGISTRY.iter(stage=stage)
-                             if m.name in enabled_global]
+            stage_modules = [
+                m for m in _DEFAULT_REGISTRY.iter(stage=stage) if m.name in enabled_global
+            ]
             modules_skipped = []
 
             if not stage_modules:
@@ -307,7 +341,12 @@ def main(argv=None):
 
             log.info("=== stage: %s ===", stage)
             stage_argv = _build_stage_argv(
-                stage, args, hosts_file, enum_xlsx, outdir, enabled_global,
+                stage,
+                args,
+                hosts_file,
+                enum_xlsx,
+                outdir,
+                enabled_global,
             )
             start = time.monotonic()
             rc = _STAGE_MAIN[stage](stage_argv)
@@ -318,15 +357,16 @@ def main(argv=None):
                 overall_rc = 1
                 log.warning("stage %s exited %s", stage, rc)
             manifest.add_stage(
-                stage, status, elapsed,
+                stage,
+                status,
+                elapsed,
                 modules_run=[m.name for m in runnable],
                 modules_skipped=modules_skipped,
                 exit_code=rc,
             )
 
             # Sweep short-circuit: zero live hosts → bail out cleanly.
-            if stage == "sweep" and os.path.exists(hosts_file) and \
-                    os.path.getsize(hosts_file) == 0:
+            if stage == "sweep" and os.path.exists(hosts_file) and os.path.getsize(hosts_file) == 0:
                 log.info("sweep found no live hosts; stopping")
                 manifest.set_exit_code(overall_rc)
                 return overall_rc

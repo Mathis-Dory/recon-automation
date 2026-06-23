@@ -22,9 +22,12 @@ def test_dispatch_probes_routes_by_port():
 def test_dispatch_probes_propagates_keyboard_interrupt():
     """KI in a worker bubbles up so the orchestrator can write its 130 manifest."""
     import pytest
+
     open_ports = {("10.0.0.1", 21), ("10.0.0.1", 8080)}
+
     def boom(ip, port=None):
         raise KeyboardInterrupt
+
     fns = {"ftp": boom, "banner": boom, "web": boom, "smb": lambda ip: None}
     with pytest.raises(KeyboardInterrupt):
         cli_enum.dispatch_probes(open_ports, web_ports=[8080], probe_fns=fns)
@@ -46,10 +49,12 @@ def test_dispatch_probes_skips_disabled():
         "smb": lambda ip: "SMB NULL OK",
     }
     res = cli_enum.dispatch_probes(
-        open_ports, web_ports=[8080], probe_fns=fns,
+        open_ports,
+        web_ports=[8080],
+        probe_fns=fns,
         disabled_probes={"probe-ftp", "probe-smb"},
     )
-    assert res[("10.0.0.1", 21)]["finding"] == ""   # ftp skipped
+    assert res[("10.0.0.1", 21)]["finding"] == ""  # ftp skipped
     assert res[("10.0.0.1", 22)]["finding"] == "banner:22"
     assert res[("10.0.0.1", 8080)]["http_title"] == "title:8080"
     assert res[("10.0.0.1", 445)]["finding"] == ""  # smb skipped
@@ -64,7 +69,9 @@ def test_dispatch_probes_unknown_disabled_names_are_ignored():
         "smb": lambda ip: None,
     }
     res = cli_enum.dispatch_probes(
-        open_ports, web_ports=[], probe_fns=fns,
+        open_ports,
+        web_ports=[],
+        probe_fns=fns,
         disabled_probes={"probe-bogus"},
     )
     assert res[("10.0.0.1", 21)]["finding"] == "FTP ANON OK"
@@ -72,13 +79,13 @@ def test_dispatch_probes_unknown_disabled_names_are_ignored():
 
 def test_cli_enum_parses_disable_probes_csv():
     parser = cli_enum.build_arg_parser()
-    args = parser.parse_args(["--disable-probes", "probe-ftp,probe-smb",
-                              "-t", "10.0.0.1"])
+    args = parser.parse_args(["--disable-probes", "probe-ftp,probe-smb", "-t", "10.0.0.1"])
     assert args.disable_probes == "probe-ftp,probe-smb"
 
 
 def test_cli_enum_concurrency_default_and_override():
     import pytest
+
     parser = cli_enum.build_arg_parser()
     assert parser.parse_args(["-t", "10.0.0.1"]).concurrency == 32
     assert parser.parse_args(["-t", "10.0.0.1", "--concurrency", "8"]).concurrency == 8
@@ -116,8 +123,7 @@ def test_dispatch_probes_concurrency_one_runs_sequentially():
         "web": lambda ip, port: f"title:{ip}",
         "smb": lambda ip: None,
     }
-    res = cli_enum.dispatch_probes(open_ports, web_ports=[8080], probe_fns=fns,
-                                   concurrency=1)
+    res = cli_enum.dispatch_probes(open_ports, web_ports=[8080], probe_fns=fns, concurrency=1)
     assert res[("10.0.0.1", 21)]["finding"] == "ftp:10.0.0.1"
     assert res[("10.0.0.2", 8080)]["http_title"] == "title:10.0.0.2"
 
@@ -137,8 +143,7 @@ def test_dispatch_probes_records_per_probe_exception():
         "web": lambda ip, port: "",
         "smb": lambda ip: None,
     }
-    res = cli_enum.dispatch_probes(open_ports, web_ports=[], probe_fns=fns,
-                                   concurrency=4)
+    res = cli_enum.dispatch_probes(open_ports, web_ports=[], probe_fns=fns, concurrency=4)
     assert "probe error" in res[("10.0.0.1", 21)]["finding"]
     assert "connection refused" in res[("10.0.0.1", 21)]["finding"]
     assert res[("10.0.0.2", 21)]["finding"] == "FTP ok"
@@ -153,6 +158,7 @@ def test_dispatch_probes_no_jobs_returns_empty_rows():
         "web": lambda ip, port: "",
         "smb": lambda ip: None,
     }
-    res = cli_enum.dispatch_probes(open_ports, web_ports=[], probe_fns=fns,
-                                   disabled_probes={"probe-ftp"})
+    res = cli_enum.dispatch_probes(
+        open_ports, web_ports=[], probe_fns=fns, disabled_probes={"probe-ftp"}
+    )
     assert res[("10.0.0.1", 21)] == {"http_title": "", "finding": ""}

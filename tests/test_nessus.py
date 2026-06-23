@@ -1,4 +1,5 @@
 import pytest
+
 from recon import nessus
 
 
@@ -39,10 +40,12 @@ def make_client():
 def test_find_template_matches_name():
     client, sess = make_client()
     sess.responses[("GET", "https://nessus:8834/editor/scan/templates")] = FakeResp(
-        {"templates": [
-            {"name": "basic", "title": "Basic Network Scan", "uuid": "u-basic"},
-            {"name": "advanced", "title": "Advanced Scan", "uuid": "u-adv"},
-        ]}
+        {
+            "templates": [
+                {"name": "basic", "title": "Basic Network Scan", "uuid": "u-basic"},
+                {"name": "advanced", "title": "Advanced Scan", "uuid": "u-adv"},
+            ]
+        }
     )
     assert client.find_template("Basic Network Scan") == "u-basic"
 
@@ -58,9 +61,7 @@ def test_find_template_missing_raises():
 
 def test_create_scan_returns_id():
     client, sess = make_client()
-    sess.responses[("POST", "https://nessus:8834/scans")] = FakeResp(
-        {"scan": {"id": 42}}
-    )
+    sess.responses[("POST", "https://nessus:8834/scans")] = FakeResp({"scan": {"id": 42}})
     sid = client.create_scan("job", "10.0.0.0/24", "u-basic")
     assert sid == 42
     _, _, kwargs = sess.requests[-1]

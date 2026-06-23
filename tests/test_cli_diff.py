@@ -1,7 +1,4 @@
 import json
-import os
-
-import pytest
 
 from recon import cli_diff
 
@@ -35,16 +32,36 @@ def test_diff_lists_new_hosts_in_b(tmp_path, monkeypatch, capsys):
 
 def test_diff_reports_new_nuclei_findings(tmp_path, monkeypatch, capsys):
     a, b = tmp_path / "a", tmp_path / "b"
-    _seed(a, ["10.0.0.1"], [
-        {"host": "10.0.0.1", "template-id": "ssh-banner",
-         "info": {"severity": "info"}, "matched-at": "10.0.0.1:22"},
-    ])
-    _seed(b, ["10.0.0.1"], [
-        {"host": "10.0.0.1", "template-id": "ssh-banner",
-         "info": {"severity": "info"}, "matched-at": "10.0.0.1:22"},
-        {"host": "10.0.0.1", "template-id": "exposed-panel",
-         "info": {"severity": "medium"}, "matched-at": "10.0.0.1:8080/admin"},
-    ])
+    _seed(
+        a,
+        ["10.0.0.1"],
+        [
+            {
+                "host": "10.0.0.1",
+                "template-id": "ssh-banner",
+                "info": {"severity": "info"},
+                "matched-at": "10.0.0.1:22",
+            },
+        ],
+    )
+    _seed(
+        b,
+        ["10.0.0.1"],
+        [
+            {
+                "host": "10.0.0.1",
+                "template-id": "ssh-banner",
+                "info": {"severity": "info"},
+                "matched-at": "10.0.0.1:22",
+            },
+            {
+                "host": "10.0.0.1",
+                "template-id": "exposed-panel",
+                "info": {"severity": "medium"},
+                "matched-at": "10.0.0.1:8080/admin",
+            },
+        ],
+    )
 
     def fake_dir(name, root=None):
         return str({"a": a, "b": b}[name])

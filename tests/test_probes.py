@@ -39,10 +39,17 @@ def test_probe_web_title_https_for_443():
 
 def test_probe_banner_reads_socket():
     class FakeSock:
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def recv(self, n): return b"SSH-2.0-OpenSSH_8.9\r\n"
-        def settimeout(self, t): pass
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def recv(self, n):
+            return b"SSH-2.0-OpenSSH_8.9\r\n"
+
+        def settimeout(self, t):
+            pass
 
     def factory(addr, timeout=None):
         return FakeSock()
@@ -53,11 +60,20 @@ def test_probe_banner_reads_socket():
 
 def test_probe_ftp_anon_success():
     class FakeFTP:
-        def __init__(self, *a, **k): pass
-        def connect(self, host, port, timeout): pass
-        def login(self): pass
-        def nlst(self): return ["pub", "incoming"]
-        def quit(self): pass
+        def __init__(self, *a, **k):
+            pass
+
+        def connect(self, host, port, timeout):
+            pass
+
+        def login(self):
+            pass
+
+        def nlst(self):
+            return ["pub", "incoming"]
+
+        def quit(self):
+            pass
 
     out = probes.probe_ftp_anon("10.0.0.1", ftp_factory=FakeFTP)
     assert out == "FTP ANON OK (listing: yes)"
@@ -65,9 +81,14 @@ def test_probe_ftp_anon_success():
 
 def test_probe_ftp_anon_failure():
     class FakeFTP:
-        def __init__(self, *a, **k): pass
-        def connect(self, host, port, timeout): pass
-        def login(self): raise OSError("530 denied")
+        def __init__(self, *a, **k):
+            pass
+
+        def connect(self, host, port, timeout):
+            pass
+
+        def login(self):
+            raise OSError("530 denied")
 
     assert probes.probe_ftp_anon("10.0.0.1", ftp_factory=FakeFTP) is None
 

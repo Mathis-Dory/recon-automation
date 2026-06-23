@@ -14,8 +14,15 @@ def test_parse_nxc_smb():
 
 
 def test_smb_rows_combine():
-    parsed = {"10.0.0.10": {"host": "DC01", "os": "Windows Server 2019",
-                             "signing": "True", "smbv1": "False", "domain": "lab.local"}}
+    parsed = {
+        "10.0.0.10": {
+            "host": "DC01",
+            "os": "Windows Server 2019",
+            "signing": "True",
+            "smbv1": "False",
+            "domain": "lab.local",
+        }
+    }
     findings = {"10.0.0.10": "SMB NULL OK: 3 shares"}
     rows = cli_smb.smb_rows(parsed, findings)
     assert rows[0]["ip"] == "10.0.0.10"

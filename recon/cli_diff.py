@@ -1,4 +1,5 @@
 """pt-recon diff: compare two engagements' results."""
+
 import argparse
 import json
 import os
@@ -14,8 +15,11 @@ def build_arg_parser():
     )
     parser.add_argument("a", help="baseline engagement name")
     parser.add_argument("b", help="newer engagement name to diff against the baseline")
-    parser.add_argument("--outdir", dest="outdir",
-                        help="engagement output root (overrides $PT_RECON_OUTPUT and default)")
+    parser.add_argument(
+        "--outdir",
+        dest="outdir",
+        help="engagement output root (overrides $PT_RECON_OUTPUT and default)",
+    )
     return parser
 
 
@@ -33,6 +37,7 @@ def _read_services(outdir):
     if not os.path.exists(path):
         return set()
     import openpyxl
+
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
     services = set()
@@ -66,12 +71,14 @@ def _read_nuclei(outdir):
                 obj = json.loads(line)
             except ValueError:
                 continue
-            findings.append((
-                obj.get("host", ""),
-                obj.get("template-id") or obj.get("templateID") or "",
-                (obj.get("info") or {}).get("severity", ""),
-                obj.get("matched-at") or obj.get("matchedAt") or "",
-            ))
+            findings.append(
+                (
+                    obj.get("host", ""),
+                    obj.get("template-id") or obj.get("templateID") or "",
+                    (obj.get("info") or {}).get("severity", ""),
+                    obj.get("matched-at") or obj.get("matchedAt") or "",
+                )
+            )
     return findings
 
 
@@ -98,7 +105,9 @@ def main(argv=None):
 
     print(f"diff: {args.a} -> {args.b}")
     print()
-    print(f"hosts: {len(hosts_a)} → {len(hosts_b)}  (+{len(new_hosts)} new, -{len(dropped_hosts)} gone)")
+    print(
+        f"hosts: {len(hosts_a)} → {len(hosts_b)}  (+{len(new_hosts)} new, -{len(dropped_hosts)} gone)"
+    )
     if new_hosts:
         print("  new hosts:")
         for ip in new_hosts:

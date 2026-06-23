@@ -1,4 +1,5 @@
 import pytest
+
 from recon import cli_nuclei, common
 
 
