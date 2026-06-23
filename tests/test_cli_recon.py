@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 
 import pytest
 
@@ -8,6 +9,22 @@ from recon import cli_recon
 
 def _argv_for(name, range_):
     return ["-n", name, "-r", range_]
+
+
+@pytest.fixture
+def stub_tools_present(monkeypatch):
+    """Make shutil.which report nmap/masscan/nxc as present.
+
+    The orchestrator auto-skips modules whose Tool() prereqs are absent. CI
+    runners don't have these binaries; tests that mock cli_*.main want the
+    orchestrator to actually call those mocks instead of skipping the stage.
+    """
+    original_which = shutil.which
+    stubbed = {"nmap", "masscan", "nxc"}
+    monkeypatch.setattr(
+        shutil, "which",
+        lambda name: f"/usr/bin/{name}" if name in stubbed else original_which(name),
+    )
 
 
 def test_parser_includes_stage_and_module_flags(tmp_path):
@@ -36,7 +53,7 @@ def test_target_args_ignores_empty_hosts_file(tmp_path):
     assert cli_recon._target_args(args, str(nonempty)) == ["-iL", str(nonempty)]
 
 
-def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch):
+def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch, stub_tools_present):
     """Default invocation: every stage runs (or auto-skips with a reason)."""
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
@@ -76,7 +93,7 @@ def test_orchestrator_runs_all_default_on_stages(tmp_path, monkeypatch):
     assert {s["name"] for s in manifest["stages"]} >= {"sweep", "enum", "nuclei"}
 
 
-def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch):
+def test_orchestrator_passes_disable_probes_to_enum(tmp_path, monkeypatch, stub_tools_present):
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
     monkeypatch.setattr("recon.common.parse_targets",
@@ -250,7 +267,7 @@ def test_subparser_propagates_exit_code(monkeypatch):
     assert rc == 7
 
 
-def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkeypatch):
+def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkeypatch, stub_tools_present):
     """If sweep exits non-zero but writes an empty hosts file, overall exit must be 1 (not 0)."""
     outdir = tmp_path / "eng"
     monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
@@ -283,7 +300,7 @@ def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkey
     assert smb_called == [], "smb should not be invoked after sweep short-circuit"
 
 
-def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path):
+def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path, stub_tools_present):
     """`pt-recon -n foo -r ...` (no subcommand) still works as before."""
     monkeypatch.setattr("recon.common.engagement_dir",
                         lambda name: str(tmp_path / "eng"))
