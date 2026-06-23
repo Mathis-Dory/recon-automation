@@ -89,6 +89,8 @@ def build_arg_parser():
                         help="engagement output root (default: $PT_RECON_OUTPUT or ~/tools/recon/output)")
     parser.add_argument("--scope-file", dest="scope_file",
                         help="allow-list of CIDRs (one per line; # comments); abort if any target is outside")
+    parser.add_argument("--resume", dest="resume", action="store_true",
+                        help="skip stages already recorded as status=ok in run.json (with their artifact present)")
     parser.add_argument("--dry-run", dest="dry_run", action="store_true",
                         help="print planned stages, enabled modules, and skip reasons; do not run anything")
     parser.add_argument("--list-modules", dest="list_modules", action="store_true",
@@ -250,7 +252,10 @@ def main(argv=None):
         print("enabled modules:", ", ".join(sorted(enabled_global)) or "(none)")
         return 0
 
-    manifest = RunManifest(args.name, outdir, len(targets), targets_source)
+    if args.resume:
+        manifest = RunManifest.from_existing(args.name, outdir, len(targets), targets_source)
+    else:
+        manifest = RunManifest(args.name, outdir, len(targets), targets_source)
     log_handler = attach_run_log(os.path.join(outdir, "run.log"))
 
     log.info("engagement '%s' → %s", args.name, outdir)
@@ -259,6 +264,10 @@ def main(argv=None):
     overall_rc = 0
     try:
         for stage in _PHASE_1_STAGES:
+            if args.resume and manifest.is_stage_complete(stage):
+                log.info("=== stage: %s (resumed; already complete) ===", stage)
+                continue
+
             stage_modules = [m for m in _DEFAULT_REGISTRY.iter(stage=stage)
                              if m.name in enabled_global]
             modules_skipped = []
