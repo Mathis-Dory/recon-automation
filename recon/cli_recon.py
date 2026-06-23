@@ -12,6 +12,7 @@ import logging
 
 from recon import common
 from recon import cli_sweep, cli_enum, cli_nuclei, cli_nessus, cli_smb
+from recon import cli_status, cli_diff
 from recon.modules import (
     _DEFAULT_REGISTRY,
     register_argparse_flags,
@@ -60,6 +61,12 @@ _STAGE_MAIN = {
     "smb": lambda a: cli_smb.main(a),
 }
 
+# Meta subcommands operate on prior engagement output, not the live pipeline.
+_META_MAIN = {
+    "status": lambda a: cli_status.main(a),
+    "diff": lambda a: cli_diff.main(a),
+}
+
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
@@ -72,6 +79,10 @@ def build_arg_parser():
             "  pt-recon nuclei ARGS    run only the nuclei stage\n"
             "  pt-recon nessus ARGS    run only the nessus stage\n"
             "  pt-recon smb    ARGS    run only the smb stage\n"
+            "\n"
+            "meta subcommands (inspect prior engagements):\n"
+            "  pt-recon status NAME            summarize an engagement's run.json + artifacts\n"
+            "  pt-recon diff   NAME_A NAME_B   show what's new in NAME_B vs NAME_A\n"
             "\n"
             "exit codes:\n"
             "  0   every attempted stage succeeded\n"
@@ -179,6 +190,8 @@ def main(argv=None):
     if argv and argv[0] in _STAGE_MAIN:
         stage = argv[0]
         return _STAGE_MAIN[stage](argv[1:])
+    if argv and argv[0] in _META_MAIN:
+        return _META_MAIN[argv[0]](argv[1:])
     args = build_arg_parser().parse_args(argv)
     _print_banner()
 
