@@ -8,7 +8,7 @@ Returns a single-line summary or ``""`` on failure / non-TLS port.
 
 import socket
 import ssl
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _maybe_handshake(ip: str, port: int, timeout: float = 4.0):
@@ -54,7 +54,7 @@ def _parse_notafter(text: str):
     for fmt in ("%b %d %H:%M:%S %Y %Z", "%b %d %H:%M:%S %Y GMT"):
         try:
             dt = datetime.strptime(text, fmt)
-            return dt.replace(tzinfo=timezone.utc)
+            return dt.replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
@@ -74,14 +74,16 @@ def probe_tls_cert(ip: str, port: int, timeout: float = 4.0) -> str:
 
     bits = [f"cert: {subject}"]
     if sans:
-        bits.append("SAN: " + ",".join(sans[:8]) + (f" (+{len(sans) - 8} more)" if len(sans) > 8 else ""))
+        bits.append(
+            "SAN: " + ",".join(sans[:8]) + (f" (+{len(sans) - 8} more)" if len(sans) > 8 else "")
+        )
     if issuer and issuer != subject:
         bits.append(f"issuer: {issuer}")
     not_after = cert.get("notAfter")
     if not_after:
         dt = _parse_notafter(not_after)
         if dt is not None:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             days = (dt - now).days
             bits.append(f"expires {dt.strftime('%Y-%m-%d')} ({days}d)")
     return "; ".join(bits)

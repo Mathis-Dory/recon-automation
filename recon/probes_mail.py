@@ -4,9 +4,9 @@ All pure TCP, no new dependencies. Each function returns a single-line
 finding ("Postfix; STARTTLS" / "Dovecot IMAP4rev1") or "" on failure.
 """
 
+import contextlib
 import socket
 import ssl
-from typing import Optional
 
 _SMTP_PORTS = {25, 465, 587}
 _IMAP_PORTS = {143, 993}
@@ -14,7 +14,7 @@ _POP_PORTS = {110, 995}
 _IMPLICIT_TLS = {465, 993, 995}
 
 
-def _connect(ip: str, port: int, timeout: float = 4.0) -> Optional[socket.socket]:
+def _connect(ip: str, port: int, timeout: float = 4.0) -> socket.socket | None:
     try:
         s = socket.create_connection((ip, port), timeout=timeout)
         s.settimeout(timeout)
@@ -74,10 +74,8 @@ def probe_smtp(ip: str, port: int, timeout: float = 4.0) -> str:
     except OSError:
         return "SMTP"
     finally:
-        try:
+        with contextlib.suppress(OSError):
             sock.sendall(b"QUIT\r\n")
-        except OSError:
-            pass
         sock.close()
 
 
@@ -100,10 +98,8 @@ def probe_imap(ip: str, port: int, timeout: float = 4.0) -> str:
     except OSError:
         return "IMAP"
     finally:
-        try:
+        with contextlib.suppress(OSError):
             sock.sendall(b"a2 LOGOUT\r\n")
-        except OSError:
-            pass
         sock.close()
 
 
@@ -126,10 +122,8 @@ def probe_pop(ip: str, port: int, timeout: float = 4.0) -> str:
     except OSError:
         return "POP3"
     finally:
-        try:
+        with contextlib.suppress(OSError):
             sock.sendall(b"QUIT\r\n")
-        except OSError:
-            pass
         sock.close()
 
 

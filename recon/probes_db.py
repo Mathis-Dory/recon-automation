@@ -9,10 +9,9 @@ Thread-safe: each call creates its own socket and never mutates module state.
 import re
 import socket
 import struct
-from typing import Optional
 
 
-def _connect(ip: str, port: int, timeout: float = 4.0) -> Optional[socket.socket]:
+def _connect(ip: str, port: int, timeout: float = 4.0) -> socket.socket | None:
     try:
         s = socket.create_connection((ip, port), timeout=timeout)
         s.settimeout(timeout)
@@ -74,12 +73,12 @@ def probe_mssql(ip: str, port: int = 1433, timeout: float = 4.0) -> str:
     # Minimal TDS prelogin: header (8 bytes) + one option (VERSION=0) + terminator.
     # Header: type=18 (prelogin), status=01, length=2 bytes, spid=0, packetid=0, window=0
     payload = bytes.fromhex(
-        "00"            # token: VERSION
-        "0006"          # offset (from packet start, after header)
-        "0006"          # length
-        "ff"            # terminator
-        "0000000000"    # VERSION value placeholder (we just send zeros)
-        "00"            # trailing
+        "00"  # token: VERSION
+        "0006"  # offset (from packet start, after header)
+        "0006"  # length
+        "ff"  # terminator
+        "0000000000"  # VERSION value placeholder (we just send zeros)
+        "00"  # trailing
     )
     header = struct.pack(">BBHHBB", 0x12, 0x01, 8 + len(payload), 0, 0, 0)
     try:
@@ -98,10 +97,10 @@ def probe_mssql(ip: str, port: int = 1433, timeout: float = 4.0) -> str:
     while idx < len(body) - 6:
         if body[idx] == 0x00:  # VERSION token
             try:
-                ver_off = int.from_bytes(body[idx + 1:idx + 3], "big") - 8
+                ver_off = int.from_bytes(body[idx + 1 : idx + 3], "big") - 8
                 if 0 <= ver_off <= len(body) - 6:
                     maj, minr = body[ver_off], body[ver_off + 1]
-                    build = int.from_bytes(body[ver_off + 2:ver_off + 4], "big")
+                    build = int.from_bytes(body[ver_off + 2 : ver_off + 4], "big")
                     return f"MSSQL {maj}.{minr}.{build}"
             except (IndexError, ValueError):
                 pass

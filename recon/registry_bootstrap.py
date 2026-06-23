@@ -75,6 +75,24 @@ _BUILTINS = [
         help="WinRM reachability via nxc winrm",
         requires=[Soft(Tool("nxc"))],
     ),
+    Module(
+        name="probe-smb-signing",
+        stage="enum",
+        help="SMB signing-required audit (relay eligibility) via nxc",
+        requires=[Soft(Tool("nxc"))],
+    ),
+    Module(
+        name="probe-smb-passpol",
+        stage="enum",
+        help="domain password policy via nxc smb --pass-pol",
+        requires=[Soft(Tool("nxc"))],
+    ),
+    Module(
+        name="probe-smb-rid",
+        stage="enum",
+        help="anonymous RID brute via nxc smb --rid-brute",
+        requires=[Soft(Tool("nxc"))],
+    ),
     Module(name="nuclei", stage="nuclei", help="nuclei template scan"),
     Module(
         name="nessus",

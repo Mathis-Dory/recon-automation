@@ -9,16 +9,14 @@ requirement on probe-nfs.
 import re
 import shutil
 import subprocess
-from typing import Optional
 
 
-def _run(cmd: list, timeout: float = 30.0) -> Optional[str]:
+def _run(cmd: list, timeout: float = 30.0) -> str | None:
     """Run `cmd` with capture; return combined stdout+stderr, or None on failure."""
     if shutil.which(cmd[0]) is None:
         return None
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=timeout, check=False)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     except (subprocess.TimeoutExpired, OSError):
         return None
     return (result.stdout or "") + (result.stderr or "")
@@ -26,7 +24,9 @@ def _run(cmd: list, timeout: float = 30.0) -> Optional[str]:
 
 _LDAP_DOMAIN = re.compile(r"\(domain:([^)]+)\)")
 _LDAP_FUNC = re.compile(r"Functional Level[: ]+(\S+)", re.IGNORECASE)
-_NAMING_CTX = re.compile(r"(?:naming|defaultNamingContext)[^\n]*?(DC=[A-Za-z0-9,=. _-]+)", re.IGNORECASE)
+_NAMING_CTX = re.compile(
+    r"(?:naming|defaultNamingContext)[^\n]*?(DC=[A-Za-z0-9,=. _-]+)", re.IGNORECASE
+)
 
 
 def probe_ldap(ip: str, port: int) -> str:

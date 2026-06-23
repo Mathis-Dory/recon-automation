@@ -52,8 +52,7 @@ def probe_web_deep(ip: str, port: int, timeout: float = 4.0, getter=requests.get
     """Issue a few GETs and stitch the results into a single finding line."""
     pieces = []
     try:
-        resp = getter(_url(ip, port, "/"), timeout=timeout, verify=False,
-                      allow_redirects=False)
+        resp = getter(_url(ip, port, "/"), timeout=timeout, verify=False, allow_redirects=False)
     except requests.RequestException:
         return ""
     sig = _server_signature(resp.headers)
@@ -77,8 +76,9 @@ def probe_web_deep(ip: str, port: int, timeout: float = 4.0, getter=requests.get
         pieces.append("tech: " + ",".join(tech))
     # robots.txt
     try:
-        robots = getter(_url(ip, port, "/robots.txt"), timeout=timeout, verify=False,
-                        allow_redirects=False)
+        robots = getter(
+            _url(ip, port, "/robots.txt"), timeout=timeout, verify=False, allow_redirects=False
+        )
         if robots.status_code == 200 and "Disallow" in robots.text or "Allow" in robots.text:
             paths = _robots_paths(robots.text)
             if paths:
@@ -87,8 +87,9 @@ def probe_web_deep(ip: str, port: int, timeout: float = 4.0, getter=requests.get
         pass
     # Favicon hash
     try:
-        fav = getter(_url(ip, port, "/favicon.ico"), timeout=timeout, verify=False,
-                     allow_redirects=False)
+        fav = getter(
+            _url(ip, port, "/favicon.ico"), timeout=timeout, verify=False, allow_redirects=False
+        )
         if fav.status_code == 200 and fav.content:
             digest = hashlib.sha256(fav.content).hexdigest()[:16]
             pieces.append(f"favicon: sha256:{digest}")
