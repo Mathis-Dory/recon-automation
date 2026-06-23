@@ -1,10 +1,13 @@
 """Shared helpers: target/port parsing, config, Excel/JSON, output, logging."""
 
-import ipaddress
-import os
 import configparser
+import ipaddress
 import logging
+import os
 import shutil
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill
 
 
 def require_tools(names):
@@ -57,8 +60,28 @@ def parse_targets(range_=None, targets=None, infile=None):
 
 
 DEFAULT_WEB_PORTS = [
-    80, 81, 88, 443, 446, 8080, 8081, 8082, 8083, 8085, 8443, 8888,
-    9000, 9001, 9090, 8000, 8008, 8090, 8182, 8281, 7001, 10000,
+    80,
+    81,
+    88,
+    443,
+    446,
+    8080,
+    8081,
+    8082,
+    8083,
+    8085,
+    8443,
+    8888,
+    9000,
+    9001,
+    9090,
+    8000,
+    8008,
+    8090,
+    8182,
+    8281,
+    7001,
+    10000,
 ]
 
 SERVICE_PORTS = {
@@ -173,9 +196,6 @@ def get_logger(name):
         logger.propagate = False
     return logger
 
-
-import openpyxl
-from openpyxl.styles import Font, PatternFill
 
 ENUM_COLUMNS = ["ip", "port", "state", "http title", "service", "finding"]
 _ROW_KEYS = ["ip", "port", "state", "http_title", "service", "finding"]

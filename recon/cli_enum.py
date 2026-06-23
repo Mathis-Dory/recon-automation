@@ -13,11 +13,12 @@ by ``--concurrency``; per-host SMB is pre-deduplicated so a single SMB call
 covers both ports 139 and 445. Per-probe errors are recorded per row rather
 than aborting the run; ``KeyboardInterrupt`` cancels in-flight probes cleanly.
 """
-import sys
+
 import argparse
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from recon import common, scan, probes, enum_core
+from recon import common, enum_core, probes, scan
 
 SMB_PORTS = {139, 445}
 
@@ -43,8 +44,7 @@ def _build_probe_jobs(open_ports, web_ports, fns, disabled):
     return jobs
 
 
-def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None,
-                    concurrency=32):
+def dispatch_probes(open_ports, web_ports, probe_fns=None, disabled_probes=None, concurrency=32):
     """Route each open port to its probe; return per-(ip,port) results.
 
     `disabled_probes`, when given, is an iterable of registry probe names
@@ -94,8 +94,7 @@ def build_arg_parser():
     parser = argparse.ArgumentParser(
         prog="pt-enum",
         description=(
-            "Service enumeration: masscan → nmap -sV → per-protocol probes → "
-            "Excel report."
+            "Service enumeration: masscan → nmap -sV → per-protocol probes → Excel report."
         ),
         epilog=(
             "examples:\n"
@@ -111,25 +110,51 @@ def build_arg_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("-o", "--output", dest="output", default="enum.xlsx",
-                        help="output .xlsx path (default: enum.xlsx)")
-    parser.add_argument("--ports", dest="ports",
-                        help="ports to scan, e.g. 22,80,8000-8100 (default: built-in enum set)")
-    parser.add_argument("--web-ports", dest="web_ports",
-                        help="ports treated as HTTP for the web probe (default: built-in web set)")
-    parser.add_argument("--rate", dest="rate", type=int, default=1000,
-                        help="masscan packet rate in pps (default: 1000)")
-    parser.add_argument("--concurrency", dest="concurrency", type=_positive_int, default=32,
-                        help="probe thread pool size (default: 32; minimum 1)")
-    parser.add_argument("--disable-probes", dest="disable_probes", default="",
-                        help="comma-separated registry probe names to skip (advanced; "
-                             "set automatically by pt-recon)")
+    parser.add_argument(
+        "-r", "--range", dest="range", help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)"
+    )
+    parser.add_argument(
+        "-t", "--targets", dest="targets", help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6"
+    )
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file with one target per line")
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        default="enum.xlsx",
+        help="output .xlsx path (default: enum.xlsx)",
+    )
+    parser.add_argument(
+        "--ports",
+        dest="ports",
+        help="ports to scan, e.g. 22,80,8000-8100 (default: built-in enum set)",
+    )
+    parser.add_argument(
+        "--web-ports",
+        dest="web_ports",
+        help="ports treated as HTTP for the web probe (default: built-in web set)",
+    )
+    parser.add_argument(
+        "--rate",
+        dest="rate",
+        type=int,
+        default=1000,
+        help="masscan packet rate in pps (default: 1000)",
+    )
+    parser.add_argument(
+        "--concurrency",
+        dest="concurrency",
+        type=_positive_int,
+        default=32,
+        help="probe thread pool size (default: 32; minimum 1)",
+    )
+    parser.add_argument(
+        "--disable-probes",
+        dest="disable_probes",
+        default="",
+        help="comma-separated registry probe names to skip (advanced; "
+        "set automatically by pt-recon)",
+    )
     return parser
 
 
@@ -137,8 +162,8 @@ def _positive_int(s):
     """argparse type: int >= 1."""
     try:
         n = int(s)
-    except (TypeError, ValueError):
-        raise argparse.ArgumentTypeError(f"expected integer, got {s!r}")
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(f"expected integer, got {s!r}") from exc
     if n < 1:
         raise argparse.ArgumentTypeError(f"must be >= 1, got {n}")
     return n
@@ -175,9 +200,9 @@ def main(argv=None):
 
     nmap_info = scan.run_nmap_sv(open_ports)
     disabled = {p.strip() for p in (args.disable_probes or "").split(",") if p.strip()}
-    probe_results = dispatch_probes(open_ports, web_ports,
-                                    disabled_probes=disabled,
-                                    concurrency=args.concurrency)
+    probe_results = dispatch_probes(
+        open_ports, web_ports, disabled_probes=disabled, concurrency=args.concurrency
+    )
     rows = enum_core.build_rows(open_ports, nmap_info, probe_results)
     out = common.write_enum_workbook(rows, args.output)
     anon = sum(1 for r in rows if any(m in r["finding"].upper() for m in ("ANON", "NULL", "GUEST")))

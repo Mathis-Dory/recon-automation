@@ -1,4 +1,5 @@
 """Wrappers around masscan and nmap with parseable output."""
+
 import subprocess
 
 

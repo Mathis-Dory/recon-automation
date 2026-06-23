@@ -9,10 +9,10 @@ Severity, tag, template, and rate-limit flags are passed straight through to
 nuclei. The exit code mirrors nuclei's own exit code, so a non-zero result
 means nuclei itself reported an error.
 """
-import os
-import sys
-import subprocess
+
 import argparse
+import subprocess
+import sys
 
 from recon import common, nuclei
 
@@ -51,24 +51,35 @@ def build_arg_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("--from-enum", dest="from_enum",
-                        help="enum .xlsx to derive web targets from (may be combined with -r/-t/-iL)")
-    parser.add_argument("-o", "--output", dest="output", default="nuclei.jsonl",
-                        help="JSONL output path (default: nuclei.jsonl)")
-    parser.add_argument("--severity", default="medium,high,critical",
-                        help="nuclei -severity filter (default: medium,high,critical)")
-    parser.add_argument("--rate-limit", dest="rate_limit",
-                        help="passed to nuclei -rate-limit (requests/sec)")
-    parser.add_argument("--tags",
-                        help="passed to nuclei -tags (comma-separated)")
-    parser.add_argument("--templates",
-                        help="passed to nuclei -t (templates path or pattern)")
+    parser.add_argument(
+        "-r", "--range", dest="range", help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)"
+    )
+    parser.add_argument(
+        "-t", "--targets", dest="targets", help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6"
+    )
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file with one target per line")
+    parser.add_argument(
+        "--from-enum",
+        dest="from_enum",
+        help="enum .xlsx to derive web targets from (may be combined with -r/-t/-iL)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        default="nuclei.jsonl",
+        help="JSONL output path (default: nuclei.jsonl)",
+    )
+    parser.add_argument(
+        "--severity",
+        default="medium,high,critical",
+        help="nuclei -severity filter (default: medium,high,critical)",
+    )
+    parser.add_argument(
+        "--rate-limit", dest="rate_limit", help="passed to nuclei -rate-limit (requests/sec)"
+    )
+    parser.add_argument("--tags", help="passed to nuclei -tags (comma-separated)")
+    parser.add_argument("--templates", help="passed to nuclei -t (templates path or pattern)")
     return parser
 
 
@@ -93,7 +104,9 @@ def main(argv=None):
         extra += ["-tags", args.tags]
     if args.templates:
         extra += ["-t", args.templates]
-    cmd = nuclei.build_nuclei_cmd(targets_file, args.output, args.severity, extra, nuclei_bin=nuclei_bin)
+    cmd = nuclei.build_nuclei_cmd(
+        targets_file, args.output, args.severity, extra, nuclei_bin=nuclei_bin
+    )
     log.info("running: %s", " ".join(cmd))
     result = subprocess.run(cmd)
     log.info("nuclei exit=%s; output=%s", result.returncode, args.output)

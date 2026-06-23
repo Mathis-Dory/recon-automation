@@ -1,4 +1,4 @@
-from recon import nuclei, common
+from recon import common, nuclei
 
 
 def test_targets_from_enum(tmp_path):
@@ -31,4 +31,5 @@ def test_build_nuclei_cmd_custom_bin():
 def test_ensure_nuclei_found():
     def which(name):
         return "/usr/bin/nuclei"
+
     assert nuclei.ensure_nuclei(which=which) == "/usr/bin/nuclei"

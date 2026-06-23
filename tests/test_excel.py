@@ -1,13 +1,26 @@
 import openpyxl
+
 from recon import common
 
 
 def test_write_enum_workbook(tmp_path):
     rows = [
-        {"ip": "10.0.0.1", "port": 80, "state": "open",
-         "http_title": "Login", "service": "http", "finding": ""},
-        {"ip": "10.0.0.2", "port": 21, "state": "open",
-         "http_title": "", "service": "ftp", "finding": "FTP ANON OK (listing: yes)"},
+        {
+            "ip": "10.0.0.1",
+            "port": 80,
+            "state": "open",
+            "http_title": "Login",
+            "service": "http",
+            "finding": "",
+        },
+        {
+            "ip": "10.0.0.2",
+            "port": 21,
+            "state": "open",
+            "http_title": "",
+            "service": "ftp",
+            "finding": "FTP ANON OK (listing: yes)",
+        },
     ]
     out = str(tmp_path / "report.xlsx")
     result = common.write_enum_workbook(rows, out)

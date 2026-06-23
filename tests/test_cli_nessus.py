@@ -18,9 +18,7 @@ class FakeClient:
 
 
 def test_run_creates_and_launches():
-    args = cli_nessus.build_arg_parser().parse_args(
-        ["-n", "job", "-t", "10.0.0.1,10.0.0.2"]
-    )
+    args = cli_nessus.build_arg_parser().parse_args(["-n", "job", "-t", "10.0.0.1,10.0.0.2"])
     cfg = {"url": "https://nessus:8834", "template": "Basic Network Scan"}
     client = FakeClient()
     rc = cli_nessus.run(args, cfg, client)
@@ -31,9 +29,7 @@ def test_run_creates_and_launches():
 
 
 def test_run_no_launch():
-    args = cli_nessus.build_arg_parser().parse_args(
-        ["-n", "job", "-t", "10.0.0.1", "--no-launch"]
-    )
+    args = cli_nessus.build_arg_parser().parse_args(["-n", "job", "-t", "10.0.0.1", "--no-launch"])
     cfg = {"url": "https://nessus:8834", "template": "Basic Network Scan"}
     client = FakeClient()
     rc = cli_nessus.run(args, cfg, client)

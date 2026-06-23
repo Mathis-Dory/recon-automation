@@ -1,11 +1,17 @@
 import recon  # noqa: F401 — ensures bootstrap import side effect runs
-from recon.modules import _DEFAULT_REGISTRY, Tool, ConfigKey, Soft
-
+from recon.modules import _DEFAULT_REGISTRY, ConfigKey, Soft, Tool
 
 _EXPECTED = {
-    "sweep", "masscan", "nmap-sv",
-    "probe-ftp", "probe-ssh", "probe-web-basic", "probe-smb",
-    "nuclei", "nessus", "smb-mass",
+    "sweep",
+    "masscan",
+    "nmap-sv",
+    "probe-ftp",
+    "probe-ssh",
+    "probe-web-basic",
+    "probe-smb",
+    "nuclei",
+    "nessus",
+    "smb-mass",
 }
 
 
@@ -49,5 +55,6 @@ def test_nessus_and_smb_default_on():
 
 def test_all_module_stages_are_valid():
     from recon.modules import STAGES
+
     for m in _DEFAULT_REGISTRY.iter():
         assert m.stage in STAGES

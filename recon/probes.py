@@ -1,7 +1,9 @@
 """Per-service auth-less probes: FTP anon, SMB null/guest, banners, web title."""
+
+import contextlib
+import ftplib
 import re
 import socket
-import ftplib
 import subprocess
 
 import requests
@@ -52,10 +54,8 @@ def probe_ftp_anon(ip, port=21, timeout=5, ftp_factory=ftplib.FTP):
             has_listing = "yes" if listing else "no"
         except Exception:
             has_listing = "no"
-        try:
+        with contextlib.suppress(Exception):
             ftp.quit()
-        except Exception:
-            pass
         return f"FTP ANON OK (listing: {has_listing})"
     except Exception:
         return None
@@ -71,9 +71,6 @@ def probe_smb(ip, runner=subprocess.run):
     out = (result.stdout or "") + (result.stderr or "")
     if "[+]" not in out:
         return None
-    shares = [
-        ln for ln in out.splitlines()
-        if ("READ" in ln or "WRITE" in ln) and "[+]" not in ln
-    ]
+    shares = [ln for ln in out.splitlines() if ("READ" in ln or "WRITE" in ln) and "[+]" not in ln]
     label = "GUEST" if "(guest)" in out.lower() else "NULL"
     return f"SMB {label} OK: {len(shares)} shares"

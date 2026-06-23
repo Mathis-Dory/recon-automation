@@ -1,0 +1,21 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".pytest_cache", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+  "E501",  # line-length is handled by ruff format
+  "SIM117",  # nested with-statements are sometimes clearer than combined
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files are allowed patterns that the linter flags as smells but which are
+# idiomatic in test setup: lambda mocks, late imports for fixtures, intentionally
+# unused capture vars, and one-liner file fakes without context managers.
+"tests/*" = ["B011", "E402", "E731", "F841", "SIM115"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

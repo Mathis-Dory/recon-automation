@@ -6,10 +6,11 @@ session / guest probe for each host. Findings and signing/SMBv1 metadata are
 merged into an :func:`recon.common.write_enum_workbook`-shaped workbook so the
 output can be combined with ``pt-enum`` results.
 """
-import re
-import sys
-import subprocess
+
 import argparse
+import re
+import subprocess
+import sys
 
 from recon import common, probes
 
@@ -26,9 +27,11 @@ def parse_nxc_smb(text):
         if not m:
             continue
         os_blob = m.group("os")
-        def grab(key):
-            mm = re.search(rf"{key}:([^)]+)\)", os_blob)
+
+        def grab(key, _os_blob=os_blob):
+            mm = re.search(rf"{key}:([^)]+)\)", _os_blob)
             return mm.group(1).strip() if mm else ""
+
         out[m.group("ip")] = {
             "host": m.group("host"),
             "os": re.split(r"\s+\(", os_blob)[0].strip(),
@@ -46,14 +49,16 @@ def smb_rows(parsed, findings):
         detail = f"signing:{info.get('signing')} SMBv1:{info.get('smbv1')}"
         null = findings.get(ip, "")
         finding = f"{null} | {detail}" if null else detail
-        rows.append({
-            "ip": ip,
-            "port": 445,
-            "state": "open",
-            "http_title": info.get("host", ""),
-            "service": info.get("os", ""),
-            "finding": finding,
-        })
+        rows.append(
+            {
+                "ip": ip,
+                "port": 445,
+                "state": "open",
+                "http_title": info.get("host", ""),
+                "service": info.get("os", ""),
+                "finding": finding,
+            }
+        )
     return rows
 
 
@@ -74,14 +79,20 @@ def build_arg_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("-o", "--output", dest="output", default="smb.xlsx",
-                        help="output .xlsx path (default: smb.xlsx)")
+    parser.add_argument(
+        "-r", "--range", dest="range", help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)"
+    )
+    parser.add_argument(
+        "-t", "--targets", dest="targets", help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6"
+    )
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file with one target per line")
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        default="smb.xlsx",
+        help="output .xlsx path (default: smb.xlsx)",
+    )
     return parser
 
 
@@ -98,9 +109,7 @@ def main(argv=None):
     except (ValueError, FileNotFoundError) as exc:
         log.error(str(exc))
         return 2
-    result = subprocess.run(
-        ["nxc", "smb", *hosts], capture_output=True, text=True
-    )
+    result = subprocess.run(["nxc", "smb", *hosts], capture_output=True, text=True)
     parsed = parse_nxc_smb(result.stdout + result.stderr)
     findings = {}
     for ip in parsed:

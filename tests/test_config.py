@@ -1,4 +1,5 @@
 import pytest
+
 from recon import common
 
 
@@ -9,13 +10,16 @@ def _write_cfg(tmp_path, body):
 
 
 def test_load_full_config(tmp_path):
-    path = _write_cfg(tmp_path, (
-        "[nessus]\n"
-        "url = https://nessus.lab:8834\n"
-        "access_key = AAA\n"
-        "secret_key = BBB\n"
-        "template = Advanced Scan\n"
-    ))
+    path = _write_cfg(
+        tmp_path,
+        (
+            "[nessus]\n"
+            "url = https://nessus.lab:8834\n"
+            "access_key = AAA\n"
+            "secret_key = BBB\n"
+            "template = Advanced Scan\n"
+        ),
+    )
     cfg = common.load_nessus_config(path)
     assert cfg == {
         "url": "https://nessus.lab:8834",

@@ -8,9 +8,10 @@ or ``-iL`` (file with one IP per line); the flags may be combined.
 If no hosts are up the output file is created empty (no trailing newline) so
 downstream tools can detect this with a size check.
 """
-import sys
-import subprocess
+
 import argparse
+import subprocess
+import sys
 
 from recon import common
 
@@ -48,14 +49,20 @@ def build_arg_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("-r", "--range", dest="range",
-                        help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)")
-    parser.add_argument("-t", "--targets", dest="targets",
-                        help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6")
-    parser.add_argument("-iL", "--input-list", dest="infile",
-                        help="file with one target per line")
-    parser.add_argument("-o", "--output", dest="output", default="live-hosts.txt",
-                        help="output path for live hosts (default: live-hosts.txt)")
+    parser.add_argument(
+        "-r", "--range", dest="range", help="CIDR (10.0.0.0/24) or dashed range (10.0.0.1-10)"
+    )
+    parser.add_argument(
+        "-t", "--targets", dest="targets", help="comma-separated IPs, e.g. 10.0.0.5,10.0.0.6"
+    )
+    parser.add_argument("-iL", "--input-list", dest="infile", help="file with one target per line")
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output",
+        default="live-hosts.txt",
+        help="output path for live hosts (default: live-hosts.txt)",
+    )
     return parser
 
 
