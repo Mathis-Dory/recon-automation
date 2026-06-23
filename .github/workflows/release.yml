@@ -11,10 +11,15 @@ on:
         required: true
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    arch: x86_64, asset: pt-recon-linux-x86_64 }
+          - { os: ubuntu-24.04-arm, arch: arm64,  asset: pt-recon-linux-arm64 }
+          - { os: macos-latest,     arch: arm64,  asset: pt-recon-macos-arm64 }
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +28,7 @@ jobs:
 
       - name: Resolve tag
         id: tag
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
@@ -52,7 +58,43 @@ jobs:
             --hidden-import recon.registry_bootstrap \
             --collect-submodules recon \
             bin/pt-recon
-          ./dist/pt-recon --list-modules
+          mv dist/pt-recon "dist/${{ matrix.asset }}"
+          "./dist/${{ matrix.asset }}" --list-modules
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            git checkout "${{ github.event.inputs.tag }}"
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Install git-cliff
         run: |
@@ -73,6 +115,9 @@ jobs:
           tag_name: ${{ steps.tag.outputs.name }}
           name: ${{ steps.tag.outputs.name }}
           body_path: CHANGELOG.md
-          files: dist/pt-recon
+          files: |
+            dist/pt-recon-linux-x86_64
+            dist/pt-recon-linux-arm64
+            dist/pt-recon-macos-arm64
           generate_release_notes: false
           fail_on_unmatched_files: true
