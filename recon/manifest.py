@@ -31,6 +31,7 @@ class RunManifest:
             "stages": [],
             "exit_code": None,
         }
+        self.write()
 
     def add_stage(self, name: str, status: str, elapsed_s: float,
                   modules_run: List[str],
@@ -52,6 +53,7 @@ class RunManifest:
         self.write()
 
     def write(self) -> None:
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w") as fh:
             json.dump(self._data, fh, indent=2, sort_keys=False)
 
@@ -64,7 +66,7 @@ def attach_run_log(path: str, logger_prefix: str = "pt-") -> logging.FileHandler
     """
     handler = logging.FileHandler(path, mode="w")
     handler.setLevel(logging.INFO)
-    handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+    handler.setFormatter(logging.Formatter("[%(levelname).4s] %(name)s: %(message)s"))
     for name in list(logging.Logger.manager.loggerDict):
         if not name.startswith(logger_prefix):
             continue

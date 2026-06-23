@@ -45,14 +45,13 @@ def test_manifest_records_skipped_modules(tmp_path):
                         "reason": "config nessus.access_key missing or empty"}]
 
 
-def test_manifest_writes_incrementally(tmp_path):
-    """After add_stage but before set_exit_code, run.json should already exist."""
+def test_manifest_writes_placeholder_on_init(tmp_path):
+    """RunManifest.__init__ should immediately write a placeholder run.json with stages: [] and exit_code: null."""
     m = RunManifest("acme", str(tmp_path), 1, "-t 1.1.1.1",
                     clock=lambda: datetime(2026, 6, 22))
-    assert not (tmp_path / "run.json").exists()
-    m.add_stage("sweep", "ok", 0.1, ["sweep"], [], 0)
     assert (tmp_path / "run.json").exists()
     data = json.loads((tmp_path / "run.json").read_text())
+    assert data["stages"] == []
     assert data["exit_code"] is None  # not yet set
 
 
@@ -66,6 +65,22 @@ def test_attach_run_log_writes_log_lines(tmp_path):
         content = (tmp_path / "run.log").read_text()
         assert "hello from attachtest" in content
         assert "pt-attachtest" in content
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def test_attach_run_log_formats_warning_as_warn(tmp_path):
+    """run.log must use [WARN] (4 chars) not [WARNING] per spec §9.1."""
+    log_path = str(tmp_path / "run.log")
+    logger = common.get_logger("pt-warntest")
+    handler = attach_run_log(log_path, logger_prefix="pt-")
+    try:
+        logger.warning("hi")
+        handler.flush()
+        content = (tmp_path / "run.log").read_text()
+        assert "[WARN]" in content
+        assert "[WARNING]" not in content
     finally:
         logger.removeHandler(handler)
         handler.close()

@@ -250,6 +250,39 @@ def test_subparser_propagates_exit_code(monkeypatch):
     assert rc == 7
 
 
+def test_orchestrator_propagates_sweep_failure_with_empty_hosts(tmp_path, monkeypatch):
+    """If sweep exits non-zero but writes an empty hosts file, overall exit must be 1 (not 0)."""
+    outdir = tmp_path / "eng"
+    monkeypatch.setattr("recon.common.engagement_dir", lambda name: str(outdir))
+    monkeypatch.setattr("recon.common.parse_targets",
+                        lambda r, t, i: ["10.0.0.1"])
+
+    enum_called = []
+    nuclei_called = []
+    nessus_called = []
+    smb_called = []
+
+    def fake_sweep(argv):
+        # write an empty hosts file and return non-zero
+        idx = argv.index("-o")
+        with open(argv[idx + 1], "w") as fh:
+            fh.write("")
+        return 1
+
+    monkeypatch.setattr("recon.cli_sweep.main", fake_sweep)
+    monkeypatch.setattr("recon.cli_enum.main", lambda a: enum_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_nuclei.main", lambda a: nuclei_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_nessus.main", lambda a: nessus_called.append(a) or 0)
+    monkeypatch.setattr("recon.cli_smb.main", lambda a: smb_called.append(a) or 0)
+
+    rc = cli_recon.main(["-n", "eng", "-r", "10.0.0.0/30"])
+    assert rc == 1, f"expected exit 1 when sweep fails, got {rc}"
+    assert enum_called == [], "enum should not be invoked after sweep short-circuit"
+    assert nuclei_called == [], "nuclei should not be invoked after sweep short-circuit"
+    assert nessus_called == [], "nessus should not be invoked after sweep short-circuit"
+    assert smb_called == [], "smb should not be invoked after sweep short-circuit"
+
+
 def test_unknown_subcommand_falls_through_to_orchestrator(monkeypatch, tmp_path):
     """`pt-recon -n foo -r ...` (no subcommand) still works as before."""
     monkeypatch.setattr("recon.common.engagement_dir",
