@@ -48,6 +48,7 @@ jobs:
         run: |
           pyinstaller --onefile \
             --name pt-recon \
+            --paths . \
             --hidden-import recon.registry_bootstrap \
             --collect-submodules recon \
             bin/pt-recon
