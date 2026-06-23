@@ -490,6 +490,18 @@ class _FakeStream:
         return "".join(self.buf)
 
 
+def test_meta_subcommands_dispatch(monkeypatch):
+    status_calls, diff_calls = [], []
+    monkeypatch.setattr("recon.cli_status.main",
+                        lambda argv: status_calls.append(list(argv)) or 0)
+    monkeypatch.setattr("recon.cli_diff.main",
+                        lambda argv: diff_calls.append(list(argv)) or 0)
+    assert cli_recon.main(["status", "acme"]) == 0
+    assert status_calls == [["acme"]]
+    assert cli_recon.main(["diff", "a", "b"]) == 0
+    assert diff_calls == [["a", "b"]]
+
+
 def test_banner_prints_when_stream_is_a_tty():
     fake = _FakeStream(is_tty=True)
     cli_recon._print_banner(stream=fake)
