@@ -36,6 +36,11 @@ _BUILTINS = [
         stage="enum",
         help="MySQL/Postgres/MSSQL/Mongo/Redis banners",
     ),
+    Module(
+        name="probe-mail",
+        stage="enum",
+        help="SMTP/IMAP/POP3 banners + STARTTLS capability",
+    ),
     Module(name="nuclei", stage="nuclei", help="nuclei template scan"),
     Module(
         name="nessus",
